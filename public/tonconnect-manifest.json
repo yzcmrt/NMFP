@@ -1,0 +1,9 @@
+{
+  "url": "https://gamefi.needmoneyforporsche.wtf",
+  "name": "NMFP GameFi",
+  "iconUrl": "https://gamefi.needmoneyforporsche.wtf/icons/icon-512x512.png",
+  "termsOfUseUrl": "https://gamefi.needmoneyforporsche.wtf/terms",
+  "privacyPolicyUrl": "https://gamefi.needmoneyforporsche.wtf/privacy",
+  "version": "1.0.0",
+  "features": ["tonProof"]
+} 

@@ -1,0 +1,427 @@
+'use client';
+
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { User } from '@/types';
+import { toast } from 'react-hot-toast';
+import { userService } from '@/services/api';
+import { supabase } from '@/lib/supabaseClient';
+
+const crypto = require('crypto-browserify');
+// Supabase istemcisini oluştur
+// const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+// const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// const supabase = createClient(supabaseUrl, supabaseKey);
+
+// BOT_TOKEN değişkeni - Client tarafında erişilebilmesi için NEXT_PUBLIC_ ön ekiyle olmalı
+// Not: Bu bir güvenlik riski oluşturabilir, üretim ortamında daha güvenli yöntemler kullanmalısınız
+const BOT_TOKEN = process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN;
+console.log('NEXT_PUBLIC_TELEGRAM_BOT_TOKEN:', process.env.NEXT_PUBLIC_TELEGRAM_BOT_TOKEN ? 'tanımlı' : 'tanımlı değil');
+
+// Telegram Web App context tipi
+interface TelegramContextType {
+  telegramUser: TelegramUser | null;
+  user: User | null;
+  isLoading: boolean;
+  error: string | null;
+  rawInitData: string | null;
+  parsedInitData: TelegramInitData | null;
+}
+
+// Telegram kullanıcı tipi (WebAppUser)
+interface TelegramUser {
+  id: number;
+  first_name: string;
+  last_name?: string;
+  username?: string;
+  language_code?: string;
+  is_premium?: boolean;
+  photo_url?: string;
+  added_to_attachment_menu?: boolean;
+  allows_write_to_pm?: boolean;
+}
+
+// Telegram initData içeriği - Döküman WebAppInitData'ya göre
+interface TelegramInitData {
+  query_id?: string;
+  user?: TelegramUser;
+  receiver?: TelegramUser;
+  chat?: TelegramChat;
+  chat_type?: 'sender' | 'private' | 'group' | 'supergroup' | 'channel';
+  chat_instance?: string;
+  start_param?: string;
+  can_send_after?: number;
+  auth_date: number;
+  hash: string;
+}
+
+// Telegram Chat tipi
+interface TelegramChat {
+  id: number;
+  type: 'group' | 'supergroup' | 'channel';
+  title: string;
+  username?: string;
+  photo_url?: string;
+}
+
+// Context oluştur
+const TelegramContext = createContext<TelegramContextType>({
+  telegramUser: null,
+  user: null,
+  isLoading: true,
+  error: null,
+  rawInitData: null,
+  parsedInitData: null,
+});
+
+// Hook
+export const useTelegram = () => useContext(TelegramContext);
+
+export default function TelegramInitProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const [telegramUser, setTelegramUser] = useState<TelegramUser | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [rawInitData, setRawInitData] = useState<string | null>(null);
+  const [parsedInitData, setParsedInitData] = useState<TelegramInitData | null>(null);
+
+  useEffect(() => {
+    // Telegram WebApp API'sini yükle
+    const script = document.createElement('script');
+    script.src = 'https://telegram.org/js/telegram-web-app.js';
+    script.async = true;
+    document.head.appendChild(script);
+
+    script.onload = () => {
+      initTelegramApp();
+    };
+
+    script.onerror = () => {
+      setError('Telegram Web App API yüklenemedi');
+      setIsLoading(false);
+    };
+
+    return () => {
+      if (document.head.contains(script)) {
+        document.head.removeChild(script);
+      }
+    };
+  }, []);
+
+  const initTelegramApp = async () => {
+    try {
+      // @ts-ignore - Telegram WebApp global namespace
+      const tg = window.Telegram?.WebApp;
+      
+      if (!tg) {
+        throw new Error('Telegram WebApp API bulunamadı');
+      }
+
+      // WebApp API ve tüm özellikleri kontrol amaçlı logla
+      console.log('Telegram WebApp API:', tg);
+      console.log('Telegram Platform:', tg.platform);
+      console.log('Telegram Version:', tg.version);
+      console.log('Telegram ColorScheme:', tg.colorScheme);
+      console.log('Telegram ThemeParams:', tg.themeParams);
+      
+      // WebApp'i başlat
+      tg.expand();
+      tg.ready();
+
+      // Telegram kullanıcı bilgilerini al
+      const initDataString = tg.initData;
+      setRawInitData(initDataString);
+      
+      console.log('Raw Telegram initData:', initDataString);
+      
+      if (!initDataString) {
+        // Geliştirme ortamındayız veya doğrudan tarayıcıdan erişildi
+        console.warn('Telegram initData bulunamadı. Geliştirme modu varsayılıyor.');
+        
+        // Geliştirme için örnek veri
+        const devUser: TelegramUser = {
+          id: 12345678,
+          first_name: 'Developer',
+          username: 'dev_user',
+        };
+        
+        setTelegramUser(devUser);
+        
+        // Test için sahte InitData
+        const devInitData: TelegramInitData = {
+          user: devUser,
+          auth_date: Math.floor(Date.now() / 1000),
+          hash: 'test-hash'
+        };
+        
+        setParsedInitData(devInitData);
+        await fetchOrCreateUserAndUpdateState(devUser);
+        return;
+      }
+
+      // initData'yı ayrıştır
+      const parsedData = parseInitData(initDataString);
+      setParsedInitData(parsedData);
+      
+      // Daha detaylı log yazdırma için
+      console.log('--------------------------------------------------------');
+      console.log('🔍 Telegram InitData Tam Analiz:');
+      console.log('--------------------------------------------------------');
+      console.log('📝 Ham InitData:', initDataString);
+      console.log('📊 Ayrıştırılmış InitData:', parsedData);
+      
+      if (parsedData && parsedData.user) {
+        console.log('👤 Telegram Kullanıcısı:');
+        console.table(parsedData.user);
+        
+        console.log('📋 Kullanıcı Alan Bilgileri:');
+        for (const [key, value] of Object.entries(parsedData.user)) {
+          console.log(`${key}:`, value);
+        }
+      }
+      
+      if (parsedData && parsedData.chat) {
+        console.log('💬 Telegram Sohbet:');
+        console.table(parsedData.chat);
+      }
+      
+      console.log('🔐 Auth Date:', parsedData?.auth_date ? new Date(parsedData.auth_date * 1000).toLocaleString() : 'Yok');
+      console.log('🔑 Hash:', parsedData?.hash);
+      console.log('--------------------------------------------------------');
+      
+      if (!parsedData || !parsedData.user) {
+        throw new Error('Geçersiz Telegram verileri');
+      }
+
+      // Veriyi doğrula
+      if (!BOT_TOKEN) {
+        console.warn('BOT_TOKEN bulunamadı, veri doğrulaması yapılamıyor');
+      } else {
+        const isValid = validateInitData(initDataString, parsedData.hash);
+        console.log('Telegram veri doğrulama sonucu:', isValid);
+        
+        if (!isValid) {
+          console.error('Telegram verileri doğrulanamadı');
+          throw new Error('Telegram verisi geçersiz - doğrulama başarısız');
+        }
+      }
+
+      setTelegramUser(parsedData.user);
+      console.log('Telegram User:', parsedData.user);
+      
+      // Kullanıcı varsa, veritabanında işlem yap
+      await fetchOrCreateUserAndUpdateState(parsedData.user);
+    } catch (err: any) {
+      console.error('Telegram init hatası:', err);
+      setError(err.message || 'Bilinmeyen başlatma hatası');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Telegram initData'yı ayrıştır
+  const parseInitData = (initDataString: string): TelegramInitData | null => {
+    try {
+      const urlParams = new URLSearchParams(initDataString);
+      const result: Partial<TelegramInitData> = {
+        auth_date: Number(urlParams.get('auth_date') || 0),
+        hash: urlParams.get('hash') || '',
+      };
+
+      // Tüm parametreleri konsola logla
+      console.log('Tüm URL parametreleri:');
+      for (const [key, value] of urlParams.entries()) {
+        console.log(`${key}:`, value);
+        
+        if (key !== 'user' && key !== 'receiver' && key !== 'chat' && 
+            key !== 'auth_date' && key !== 'hash') {
+          // @ts-ignore - Dinamik özellik atama
+          result[key] = value;
+        }
+      }
+
+      // Karmaşık tipleri JSON parse ile işle
+      const userStr = urlParams.get('user');
+      if (userStr) {
+        try {
+          result.user = JSON.parse(userStr);
+          console.log('Parsed user:', result.user);
+        } catch (e) {
+          console.error('User parsing error:', e);
+        }
+      }
+      
+      const receiverStr = urlParams.get('receiver');
+      if (receiverStr) {
+        try {
+          result.receiver = JSON.parse(receiverStr);
+          console.log('Parsed receiver:', result.receiver);
+        } catch (e) {
+          console.error('Receiver parsing error:', e);
+        }
+      }
+      
+      const chatStr = urlParams.get('chat');
+      if (chatStr) {
+        try {
+          result.chat = JSON.parse(chatStr);
+          console.log('Parsed chat:', result.chat);
+        } catch (e) {
+          console.error('Chat parsing error:', e);
+        }
+      }
+      
+      return result as TelegramInitData;
+    } catch (e) {
+      console.error('initData ayrıştırma hatası:', e);
+      return null;
+    }
+  };
+
+  // Telegram initData doğrulama
+  const validateInitData = (initDataString: string, receivedHash: string): boolean => {
+    try {
+      // BOT_TOKEN yoksa doğrulama yapılamaz
+      if (!BOT_TOKEN) {
+        console.warn('BOT_TOKEN bulunamadı. Doğrulama atlanıyor. Lütfen .env.local dosyanızı kontrol edin.');
+        console.warn('NEXT_PUBLIC_TELEGRAM_BOT_TOKEN ortam değişkenini tanımlayın.');
+        
+        // Geliştirme amaçlı: BOT_TOKEN yoksa doğrulama atlanır
+        // NOT: Gerçek uygulamada, veri doğrulaması olmadan devam etmek güvenlik riski oluşturur
+        return true;
+      }
+      
+      // Gelen hash'i ayır
+      const urlParams = new URLSearchParams(initDataString);
+      urlParams.delete('hash');
+      
+      // Sıralanmış veri dizesini oluştur
+      const dataCheckArr: string[] = [];
+      
+      for (const [key, value] of [...urlParams.entries()].sort()) {
+        dataCheckArr.push(`${key}=${value}`);
+      }
+      
+      const dataCheckString = dataCheckArr.join('\n');
+      console.log('Data check string:', dataCheckString);
+      
+      // Secret key oluştur: HMAC-SHA256(bot_token, "WebAppData")
+      const secretKey = crypto
+        .createHmac('sha256', 'WebAppData')
+        .update(BOT_TOKEN)
+        .digest();
+      
+      // Veri imzasını oluştur
+      const signature = crypto
+        .createHmac('sha256', secretKey)
+        .update(dataCheckString)
+        .digest('hex');
+      
+      console.log('Generated hash:', signature);
+      console.log('Received hash:', receivedHash);
+      
+      // İmzayı karşılaştır
+      return signature === receivedHash;
+    } catch (e) {
+      console.error('Veri doğrulama hatası:', e);
+      return false;
+    }
+  };
+
+  // Kullanıcıyı veritabanında bul veya oluştur
+  const fetchOrCreateUserAndUpdateState = async (tgUser: TelegramUser) => {
+    if (!tgUser || !tgUser.id) {
+      console.error('fetchOrCreateUserAndUpdateState çağrıldı ancak tgUser veya tgUser.id eksik.');
+      setError('Geçersiz Telegram kullanıcı bilgisi.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      // RPC çağrısı yap ve dönen veriyi al
+      const { data: rpcResponse, error: rpcError } = await supabase.rpc('get_or_create_user', {
+        p_telegram_id: String(tgUser.id),
+        p_username: tgUser.username || null,
+      });
+      
+      console.log('[TelegramInitProvider] get_or_create_user RPC result:', rpcResponse);
+
+      if (rpcError) {
+        console.error('[TelegramInitProvider] get_or_create_user RPC Hatası:', rpcError);
+        throw new Error(`Supabase RPC hatası: ${rpcError.message}`);
+      }
+      
+      if (!rpcResponse || !rpcResponse.user_id) {
+         console.error('[TelegramInitProvider] RPC yanıtında user_id eksik:', rpcResponse);
+        throw new Error('Kullanıcı ID alınamadı.');
+      }
+
+      // --- JWT / setSession KODU KALDIRILDI --- 
+      // Token kontrolü ve supabase.auth.setSession çağrısı kaldırıldı.
+      // Supabase istemcisi artık anonim anahtarla çalışacak.
+      // RLS politikalarının buna göre ayarlanması GEREKLİ.
+
+      // Supabase'dan kullanıcı detaylarını çek (RPC'den gelen user_id ile)
+      const userDetails = await userService.getUserById(rpcResponse.user_id);
+      if (!userDetails) {
+        console.error('[TelegramInitProvider] Supabase kullanıcı detayları alınamadı.');
+        setError('Kullanıcı veritabanı bilgisi alınamadı veya oluşturulamadı.');
+        setUser(null); // Hata durumunda kullanıcıyı temizle
+        return;
+      }
+
+      console.log(`[TelegramInitProvider] Supabase User alindi, state'e set ediliyor:`, userDetails);
+      setUser(userDetails);
+      console.log(`[TelegramInitProvider] Yeni kullanıcı mı? ${rpcResponse.is_new}. Kullanıcı ID: ${userDetails.id}`); 
+      
+      // *** YENİ KULLANICI İSE VARLIKLARI VER ***
+      if (rpcResponse.is_new) { 
+        console.log('[TelegramInitProvider] Yeni kullanıcı tespit edildi, grant_initial_assets RPC çağrılıyor...');
+        try {
+          const { error: grantError } = await supabase.rpc('grant_initial_assets', {
+              p_user_id: userDetails.id, // Doğru UUID'yi kullan
+              p_is_premium: userDetails.is_premium || false // Kullanıcının premium durumunu al
+          });
+          if (grantError) {
+               console.error('[TelegramInitProvider] grant_initial_assets RPC hatası:', grantError);
+               // Hata olsa bile devam et, loglandı. İsteğe bağlı olarak toast gösterilebilir.
+               toast.error(`Başlangıç varlıkları ayarlanırken bir sorun oluştu: ${grantError.message}`);
+          } else {
+               console.log('[TelegramInitProvider] grant_initial_assets RPC başarıyla çağrıldı.');
+               // Başarı mesajı veya varlıkların güncellenmesi için kullanıcı verisini tekrar çekme burada yapılabilir.
+               // Örneğin: const refreshedUser = await userService.getUserById(userDetails.id); if (refreshedUser) setUser(refreshedUser);
+               toast.success('Hesabınıza başlangıç hediyeleri eklendi!');
+               // Kullanıcı state'ini hemen güncellemek için bakiyeyi manuel ekleyebilir veya tekrar çekebiliriz.
+               // Şimdilik sadece RPC çağrısını yapıyoruz, bakiye vb. sonraki veri çekmelerde güncellenmeli.
+          }
+        } catch (rpcCatchError: any) {
+             console.error('[TelegramInitProvider] grant_initial_assets RPC çağrılırken catch hatası:', rpcCatchError);
+             toast.error('Başlangıç varlıkları verilirken kritik bir hata oluştu.');
+        }
+      }
+      // *** VARLIK VERME BİTİŞİ ***
+
+    } catch (err: any) {
+      console.error('[TelegramInitProvider] fetchOrCreateUser error:', err);
+      setError(err.message || 'Kullanıcı getirilirken/oluşturulurken hata oluştu.');
+      setUser(null); // Hata durumunda kullanıcıyı temizle
+    }
+  };
+
+  return (
+    <TelegramContext.Provider value={{ 
+      telegramUser, 
+      user, 
+      isLoading, 
+      error,
+      rawInitData,
+      parsedInitData
+    }}>
+      {children}
+    </TelegramContext.Provider>
+  );
+} 

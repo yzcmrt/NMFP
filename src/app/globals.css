@@ -1,0 +1,308 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Scrollbar gizleme sınıfı */
+.scrollbar-none {
+  -ms-overflow-style: none;  /* IE ve Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari ve Opera */
+}
+
+@import "tailwindcss";
+
+:root {
+  --background: #000000;
+  --foreground: #ffffff;
+  --accent-primary: #ff6bcb;
+  --accent-secondary: #c792ea;
+  --accent-tertiary: #82aaff;
+  --accent-quaternary: #7fdbca;
+  --glow-color: rgba(213, 144, 255, 0.3);
+  --success: #5cefa0;
+  --warning: #ffcb6b;
+  --error: #ff5370;
+  --card-bg: rgba(18, 18, 18, 0.7);
+  --bottom-nav-height: 60px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: #000000;
+    --foreground: #ffffff;
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glow {
+  0% { box-shadow: 0 0 3px var(--glow-color); }
+  50% { box-shadow: 0 0 10px var(--glow-color), 0 0 15px var(--glow-color); }
+  100% { box-shadow: 0 0 3px var(--glow-color); }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes gradientBg {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease forwards;
+}
+
+.animate-glow {
+  animation: glow 3s infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse 4s infinite;
+}
+
+.animate-gradientBg {
+  animation: gradientBg 8s ease infinite;
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, #ff6bcb, #c792ea, #9d8cff);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradientBg 3s ease infinite;
+}
+
+.web3-button {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  z-index: 1;
+  color: #000000 !important;
+}
+
+.bg-white.web3-button {
+  color: #000000 !important;
+}
+
+.web3-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(45deg, var(--accent-primary), var(--accent-secondary));
+  z-index: -1;
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 0.5s ease;
+}
+
+.web3-button:hover::before {
+  transform: scaleX(1);
+}
+
+.web3-button:hover {
+  color: #ffffff !important;
+}
+
+.blur-bg {
+  position: relative;
+}
+
+.blur-bg::after {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: -10px;
+  right: -10px;
+  bottom: -10px;
+  z-index: -1;
+  background: rgba(255, 255, 255, 0.03);
+  filter: blur(30px);
+  border-radius: 20px;
+}
+
+/* Game UI styles */
+.game-card {
+  background-color: var(--card-bg);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.game-card:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.bottom-nav {
+  height: var(--bottom-nav-height);
+  background-color: rgba(10, 10, 10, 0.8);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+
+.bottom-nav::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(to right, 
+    transparent, 
+    var(--accent-primary),
+    var(--accent-secondary), 
+    transparent
+  );
+  background-size: 200% auto;
+  animation: gradientBg 8s ease infinite;
+}
+
+.bottom-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+  color: rgba(255, 255, 255, 0.6);
+  transition: color 0.2s;
+}
+
+.bottom-nav-item.active {
+  color: var(--accent-primary);
+}
+
+.bottom-nav-icon {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.bottom-nav-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.page-container {
+  padding-top: 8px;
+  padding-bottom: calc(var(--bottom-nav-height) + 8px);
+  min-height: 100vh;
+}
+
+.mobile-app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  margin-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  position: relative;
+}
+
+.mobile-app-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(to right, 
+    transparent,
+    var(--accent-secondary),
+    var(--accent-primary),
+    transparent
+  );
+  background-size: 200% auto;
+  animation: gradientBg 8s ease infinite;
+}
+
+.page-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--foreground);
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  display: inline-block;
+}
+
+.car-item, .garage-item {
+  transition: transform 0.2s;
+}
+
+.car-item:active, .garage-item:active {
+  transform: scale(0.98);
+}
+
+.stat-value {
+  font-family: var(--font-mono);
+  letter-spacing: 0.5px;
+}
+
+.app-background {
+  background-color: var(--background);
+  background-image: url('/favicon/favicon-96x96.png');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 80%;
+  background-attachment: fixed;
+  background-blend-mode: soft-light;
+  opacity: 0.1;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+a {
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
