@@ -7,7 +7,9 @@ import {
   MiningSession,
   Task,
   Transaction, 
-  CarModel 
+  CarModel,
+  CarStatus,
+  MiningStatus
 } from '@/types';
 
 // Supabase'den gelen potansiyel hataları işlemek için yardımcı fonksiyon
@@ -29,6 +31,25 @@ function handleSupabaseError(error: PostgrestError | null, context: string): voi
 
 // Kullanıcı servisleri
 export const userService = {
+  /**
+   * Kullanıcı bilgilerini getirir
+   */
+  getUserData: async (userId: string): Promise<User | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+        
+      if (error) throw error;
+      return data as User;
+    } catch (error) {
+      console.error('Kullanıcı bilgisi alınırken hata:', error);
+      return null;
+    }
+  },
+
   /**
    * Telegram ID ve kullanıcı adı ile kullanıcıyı getir veya oluştur (RPC kullanarak)
    */
@@ -165,83 +186,25 @@ export const userService = {
 // Araç servisleri
 export const carService = {
   /**
-   * Kullanıcının araçlarını getir
+   * Kullanıcının araçlarını getirir
    */
-  async getUserCars(userId: string): Promise<UserCar[]> {
-    const { data, error } = await supabase
-      .from('user_cars')
-      .select(`
-        id, 
-        user_id,
-        car_model_id,
-        name, 
-        purchase_type,
-        mining_multiplier,
-        fuel,
-        condition,
-        status,
-        mining_tour_count,
-        repair_end_time,
-        garage_id,
-        level,
-        created_at,
-        updated_at,
-        car_models (*)
-      `)
-      .eq('user_id', userId); // String UUID ile filtrele
-
-    // handleSupabaseError(error, 'getUserCars'); // Hata varsa aşağıda yakalanır
-    if (error) {
-      console.error('Error fetching user cars:', error);
-      throw error;
+  getUserCars: async (userId: string): Promise<UserCar[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('user_cars')
+        .select(`
+          *,
+          model:car_models(*)
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
+      return data as UserCar[];
+    } catch (error) {
+      console.error('Araç bilgileri alınırken hata:', error);
+      return [];
     }
-    console.log(`[supabaseService] getUserCars for ${userId}:`, data);
-
-    // Veriyi türlerine dönüştür
-    if (!data) return []; // Veri yoksa boş array döndür
-    
-    return data.map(item => {
-      // car_models ilişkisi null olabilir mi kontrol et
-      if (!item.car_models) {
-        console.warn(`User car ID ${item.id} missing car_model details.`);
-        return null; // Veya varsayılan bir model döndür
-      }
-      return {
-        id: item.id, // user_cars.id SERIAL (number)
-        userId: item.user_id, // string UUID
-        modelId: item.car_model_id, // car_models.id UUID (string)
-        name: item.name, // user_cars.name (string)
-        purchaseType: item.purchase_type, // string
-        miningMultiplier: item.mining_multiplier, // number
-        level: item.level ?? 1,
-        fuel: item.fuel,
-        condition: item.condition,
-        // inGarage: item.garage_id ? String(item.garage_id) : '', // garage_id SERIAL (number)
-        garageId: item.garage_id, // number | null
-        status: item.status,
-        miningTourCount: item.mining_tour_count,
-        repairEndTime: item.repair_end_time, // string | null
-        createdAt: item.created_at, // string
-        updatedAt: item.updated_at, // string
-        // repairTimeLeft: item.repair_end_time ? calculateRepairTimeLeft(item.repair_end_time) : undefined, // calculateRepairTimeLeft fonk. yok
-        model: {
-          id: item.car_models.id, // car_models.id UUID (string)
-          name: item.car_models.name,
-          description: item.car_models.description,
-          imageUrl: item.car_models.image_url,
-          rarity: item.car_models.rarity,
-          miningPower: item.car_models.mining_power,
-          maxFuel: item.car_models.max_fuel,
-          maxHealth: item.car_models.max_health,
-          nmfpPrice: item.car_models.nmfp_price,
-          tonPrice: item.car_models.ton_price,
-          nftMintPrice: item.car_models.nft_mint_price,
-          refillCost: item.car_models.refill_cost,
-          repairCost: item.car_models.repair_cost,
-          createdAt: item.car_models.created_at,
-        }
-      }
-    }).filter(car => car !== null) as UserCar[]; // Null olanları filtrele
   },
 
   /**
@@ -320,49 +283,48 @@ export const carService = {
     
     handleSupabaseError(error, 'selectCar');
     return !error;
+  },
+
+  /**
+   * Tüm araçları bakıma alır ve yakıt doldurur
+   */
+  maintainAllCars: async (userId: string, maintenanceCost: number, fuelCost: number): Promise<boolean> => {
+    try {
+      // Veritabanı işlemlerini transaction içinde yap
+      const { data, error } = await supabase.rpc('maintain_all_user_cars', {
+        user_id_input: userId,
+        maintenance_cost_input: maintenanceCost,
+        fuel_cost_input: fuelCost
+      });
+      
+      if (error) throw error;
+      return data?.success || false;
+    } catch (error) {
+      console.error('Araç bakımı yapılırken hata:', error);
+      return false;
+    }
   }
 };
 
 // Garaj servisleri
 export const garageService = {
   /**
-   * Kullanıcının garajlarını getir
+   * Kullanıcının garajlarını getirir
    */
-  async getUserGarages(userId: string): Promise<Garage[]> {
-    const { data, error } = await supabase
-      .from('garages')
-      .select(`
-        id,
-        user_id,
-        template_id
-      `)
-      .eq('user_id', userId) // String UUID ile filtrele
-      .is('template_id', null); 
-
-    // handleSupabaseError(error, 'getUserGarages');
-    if (error) {
-      console.error('Error fetching user garages:', error);
-      throw error;
+  getUserGarages: async (userId: string): Promise<Garage[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('garages')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+        
+      if (error) throw error;
+      return data as Garage[];
+    } catch (error) {
+      console.error('Garaj bilgileri alınırken hata:', error);
+      return [];
     }
-    console.log(`[supabaseService] getUserGarages for ${userId}:`, data);
-
-    if (!data) return []; // Veri yoksa boş array döndür
-    
-    return data.map(item => ({
-      id: item.id, // garages.id SERIAL (number)
-      userId: item.user_id, // string UUID
-      templateId: item.template_id, // string | null
-      name: item.name,
-      description: item.description,
-      imageUrl: item.image_url,
-      capacity: item.capacity,
-      level: item.level,
-      dailyBonus: item.daily_bonus,
-      value: item.value,
-      purchaseType: item.purchase_type,
-      location: item.location,
-      createdAt: item.created_at
-    }));
   },
 
   /**
@@ -410,114 +372,122 @@ export const garageService = {
 // Mining servisleri
 export const miningService = {
   /**
-   * RPC kullanarak mining başlatır.
+   * Kullanıcının aktif mining oturumunu getirir
    */
-  async startMining(userId: string, carId: number, garageId?: number | null): Promise<number> {
-    // SQL fonksiyonu UUID (TEXT) userId, INTEGER carId, INTEGER garageId bekliyor.
-    const { data: sessionId, error } = await supabase.rpc('start_mining', { 
-      p_user_id: userId, // String UUID olarak gönder
-      p_car_id: carId,   // INTEGER olarak gönder
-      p_garage_id: garageId // INTEGER olarak gönder
-    });
-    handleSupabaseError(error, 'startMining RPC');
-
-    // RPC, yeni mining_sessions INTEGER ID'sini döndürür.
-    if (typeof sessionId !== 'number' || sessionId <= 0) {
-      console.error('startMining RPC beklenmeyen dönüş tipi veya geçersiz ID:', sessionId);
-      throw new Error('Mining başlatılırken bir hata oluştu, geçersiz yanıt.');
+  getActiveMiningSession: async (userId: string): Promise<MiningSession | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('mining_sessions')
+        .select('*')
+        .eq('user_id', userId)
+        .or(`status.eq.${MiningStatus.ACTIVE},status.eq.${MiningStatus.COMPLETED}`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+        
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // Veri bulunamadı hatası, bu durumda null döndür
+          return null;
+        }
+        throw error;
+      }
+      
+      return data as MiningSession;
+    } catch (error) {
+      console.error('Mining oturumu bilgileri alınırken hata:', error);
+      return null;
     }
-
-    return sessionId;
   },
   
   /**
-   * Aktif mining oturumlarını getir
+   * Mining oturumu başlatır
    */
-  async getActiveMining(userId: string): Promise<MiningSession[]> {
-    // Veritabanından aktif mining sessionları çek (doğrudan, RPC değil)
-    const { data, error } = await supabase
-      .from('mining_sessions')
-      .select(`
-        id,
-        user_id,
-        car_id,
-        garage_id,
-        start_time,
-        end_time,
-        expected_reward,
-        status,
-        created_at,
-        car:user_cars ( id, name, car_models ( id, name, image_url ) ),
-        garage:garages ( id, name, image_url )
-      `)
-      .eq('user_id', userId) // String UUID ile filtrele
-      .eq('status', 'active');
-
-    // handleSupabaseError(error, 'getActiveMining');
-    if (error) {
-      console.error('Error fetching active mining sessions:', error);
-      throw error;
+  startMiningSession: async (
+    userId: string,
+    carId: string,
+    garageId: string,
+    startTime: Date,
+    endTime: Date,
+    expectedReward: number
+  ): Promise<MiningSession | null> => {
+    try {
+      // Önce araç durumunu güncelle
+      const { error: carError } = await supabase
+        .from('user_cars')
+        .update({ status: CarStatus.MINING })
+        .eq('id', carId)
+        .eq('user_id', userId);
+        
+      if (carError) throw carError;
+      
+      // Mining oturumu oluştur
+      const { data, error } = await supabase
+        .from('mining_sessions')
+        .insert({
+          user_id: userId,
+          car_id: carId,
+          garage_id: garageId,
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+          expected_reward: expectedReward,
+          status: MiningStatus.ACTIVE,
+        })
+        .select()
+        .single();
+        
+      if (error) throw error;
+      
+      return data as MiningSession;
+    } catch (error) {
+      console.error('Mining oturumu başlatılırken hata:', error);
+      return null;
     }
-    console.log(`[supabaseService] getActiveMining for ${userId}:`, data);
-
-    if (!data) return [];
-
-    // Veriyi MiningSession tipine map et
-    return data.map(item => {
-      // İlişkili car ve garage verilerini kontrol et
-      const carInfo = item.car ? {
-        id: item.car.id,
-        name: item.car.name,
-        model: item.car.car_models ? {
-          id: item.car.car_models.id,
-          name: item.car.car_models.name,
-          imageUrl: item.car.car_models.image_url
-        } : undefined
-      } : undefined;
-
-      const garageInfo = item.garage ? {
-        id: item.garage.id,
-        name: item.garage.name,
-        imageUrl: item.garage.image_url
-      } : undefined;
-
-      return {
-        id: item.id, // SERIAL (number)
-        userId: item.user_id, // string UUID
-        carId: item.car_id, // INTEGER
-        garageId: item.garage_id, // INTEGER | null
-        startTime: item.start_time, // string
-        endTime: item.end_time, // string
-        expectedReward: item.expected_reward, // number (BIGINT)
-        actualReward: item.actual_reward, // number (BIGINT) | null
-        status: item.status, // string
-        createdAt: item.created_at, // string
-        // timeRemaining: calculateTimeRemaining(item.end_time), // Fonksiyon lazım
-        // progressPercent: calculateProgress(item.start_time, item.end_time), // Fonksiyon lazım
-        car: carInfo,
-        garage: garageInfo,
-      };
-    });
   },
   
   /**
-   * RPC kullanarak tamamlanmış mining seansını işler.
+   * Mining oturumunu tamamlar
    */
-  async completeMining(sessionId: number): Promise<number> {
-    // SQL fonksiyonu INTEGER sessionId bekliyor.
-    // user_id kontrolü fonksiyonun içinde yapılıyor.
-    const { data: reward, error } = await supabase.rpc('complete_mining', {
-      p_mining_session_id: sessionId // INTEGER olarak gönder
-    });
-
-    handleSupabaseError(error, 'completeMining RPC');
-
-    // RPC ödülü (BIGINT -> number) döndürür
-    if (typeof reward !== 'number') {
-      console.error('completeMining RPC beklenmeyen dönüş tipi:', reward);
-      throw new Error('Mining tamamlanırken geçersiz yanıt alındı.');
+  completeMiningSession: async (sessionId: string): Promise<MiningSession | null> => {
+    try {
+      // Mining oturumunu güncelle
+      const { data, error } = await supabase.rpc('complete_mining_session', {
+        session_id_input: sessionId
+      });
+      
+      if (error) throw error;
+      
+      // Güncellenmiş oturumu getir
+      const { data: sessionData, error: sessionError } = await supabase
+        .from('mining_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .single();
+        
+      if (sessionError) throw sessionError;
+      
+      return sessionData as MiningSession;
+    } catch (error) {
+      console.error('Mining oturumu tamamlanırken hata:', error);
+      return null;
     }
-    return reward;
+  },
+  
+  /**
+   * Mining ödüllerini toplar
+   */
+  claimMiningRewards: async (sessionId: string): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase.rpc('claim_mining_rewards', {
+        session_id_input: sessionId
+      });
+      
+      if (error) throw error;
+      return data?.success || false;
+    } catch (error) {
+      console.error('Mining ödülleri toplanırken hata:', error);
+      return false;
+    }
   }
 };
 

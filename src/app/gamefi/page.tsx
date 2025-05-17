@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { formatCurrency, formatNumber } from '@/app/utils/formatters';
-import AutoMining from './components/AutoMining';
+import MiningArea from './components/MiningArea';
 import { useTelegram } from '@/components/TelegramInitProvider';
 import { supabase } from '@/lib/supabaseClient';
 import { 
@@ -313,215 +313,72 @@ export default function GameFiPage() {
   }
 
   return (
-    <div className="pb-12">
-      <div className="mobile-app-header relative mb-6">
-        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#7b2ff7] via-[#2f7bf7] to-[#2ff7c1] opacity-80"></div>
-        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">NMFP GameFi</h1>
-      </div>
-      
-      <AutoMining />
-      
-      {currentUser && (
-        <div className="bg-gradient-to-r from-[#1a1a2e] via-[#16213e] to-[#0f3460] rounded-xl p-4 mb-5 shadow-md border border-[#2a3855]">
-          <div className="flex items-center">
-            <div className="bg-gradient-to-r from-[#7b2ff7]/30 via-[#5f40f8]/30 to-[#2f7bf7]/30 w-10 h-10 rounded-full flex items-center justify-center mr-3 shadow-md">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#2ff7c1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+    <div className="pb-20 px-4">
+      {/* Kullanıcı kartı */}
+      <div className="bg-[#1a1a2e]/70 p-4 rounded-xl mb-5 shadow-md border border-[#2a3855]/50">
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 bg-[#16213e] rounded-full flex items-center justify-center">
+            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#2ff7c1] to-[#7b2ff7]">
+              {currentUser?.username?.charAt(0) || telegramUser?.first_name?.charAt(0) || '?'}
+            </span>
+          </div>
+          
+          <div>
+            <h2 className="text-xl font-bold text-white">{currentUser?.username || telegramUser?.first_name || 'Oyuncu'}</h2>
+            <div className="flex items-center gap-1 text-sm text-gray-400">
+              <span>Seviye {currentUser?.level || 1}</span>
+              <span className="text-xs mx-1">•</span>
+              <span>XP: {formatNumber(currentUser?.xp || 0)}</span>
             </div>
-            <div>
-              <p className="font-medium text-white">Hoş geldin, {currentUser.username}!</p>
-              <p className="text-xs text-gray-400">Seviye {currentUser.level} • {formatNumber(currentUser.xp)} XP</p>
-              <p className="text-xs text-gray-400">Bakiye: {formatCurrency(currentUser.balance)} NMFP</p>
+            <div className="mt-1">
+              <span className="text-[#2ff7c1] font-medium">{formatCurrency(currentUser?.balance || 0)} NMFP</span>
             </div>
           </div>
         </div>
-      )}
+      </div>
       
-      {/* --- YENİ: Toplu Mining Başlatma Bölümü --- */}
-      <div className="bg-gradient-to-r from-[#16213e] via-[#1a1a2e] to-[#16213e] rounded-xl p-4 mb-5 shadow-md border border-[#2a3855]">
-          <h3 className="font-semibold text-white mb-3">Toplu Mining Yönetimi</h3>
+      {/* Ana içerik alanı */}
+      <div className="space-y-5">
+        {/* Yeni MiningArea Bileşeni */}
+        <MiningArea />
+        
+        {/* Son İşlemler */}
+        <div className="bg-[#1a1a2e]/70 p-4 rounded-xl shadow-md border border-[#2a3855]/50">
+          <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#7b2ff7] mb-3">
+            Son İşlemler
+          </h3>
           
-          {/* Otomatik Bakım Seçeneği */} 
-          <div className="flex items-center justify-between bg-black/20 p-3 rounded-lg mb-3 border border-white/10">
-              <label htmlFor="autoPay" className="text-sm text-gray-300 flex-grow mr-2">Uygun araçların yakıt/tamir masrafları NMFP ile otomatik ödensin mi?</label>
-              <input 
-                  type="checkbox" 
-                  id="autoPay" 
-                  checked={autoPayMaintenance}
-                  onChange={(e) => setAutoPayMaintenance(e.target.checked)}
-                  className="form-checkbox h-5 w-5 text-[#7b2ff7] bg-gray-700 border-gray-600 rounded focus:ring-[#7b2ff7] focus:ring-offset-gray-800 cursor-pointer"
-              />
-          </div>
-
-          {/* Başlatma Butonu */} 
-          <button
-            onClick={handlePrepareAndStart}
-            disabled={isPreparingCars || activeMiningSessions.length >= (garages.reduce((sum, g) => sum + g.capacity, 0))}
-            className={`w-full px-6 py-3 rounded-lg text-sm font-semibold transition-all duration-300 flex items-center justify-center 
-                        ${activeMiningSessions.length >= (garages.reduce((sum, g) => sum + g.capacity, 0)) 
-                            ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                            : 'bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white hover:shadow-lg hover:shadow-[#7b2ff7]/30'} 
-                        ${isPreparingCars ? 'opacity-50 cursor-wait' : ''}`}
-          >
-              {isPreparingCars ? (
-                  <>
-                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Hazırlanıyor...
-                  </>
-              ) : activeMiningSessions.length >= (garages.reduce((sum, g) => sum + g.capacity, 0)) ? (
-                  'Tüm Slotlar Dolu'
-              ) : (
-                   'Uygun Araçları Hazırla & Mining Başlat'
-              )}
-          </button>
-
-          {/* Sonuç Alanı */} 
-          {prepareResult && !isPreparingCars && (
-              <div className={`mt-4 p-3 rounded-lg border ${prepareResult.error ? 'bg-red-900/30 border-red-500/50' : 'bg-green-900/30 border-green-500/50'} text-xs`}>
-                  {prepareResult.error ? (
-                      <p className="text-red-400">Hata: {prepareResult.error}</p>
-                  ) : (
-                      <ul className="space-y-1">
-                          <li>✅ Başlatılan Araç Sayısı: <span className="font-semibold text-white">{prepareResult.started_count}</span></li>
-                          {prepareResult.maintenance_cost_calculated !== undefined && (
-                              <li>💰 Hesaplanan Bakım Maliyeti: <span className="font-semibold text-white">{formatCurrency(prepareResult.maintenance_cost_calculated)} NMFP</span> ({prepareResult.maintenance_paid ? 'Ödendi' : 'Ödenmedi/Yetersiz Bakiye'})</li>
-                          )}
-                          {prepareResult.total_expected_reward !== undefined && (
-                               <li>🚀 Toplam Tahmini Ödül: <span className="font-semibold text-white">{formatCurrency(prepareResult.total_expected_reward)} NMFP</span></li>
-                          )}
-                          {prepareResult.warnings && prepareResult.warnings.length > 0 && (
-                              <li>⚠️ Uyarılar: {prepareResult.warnings.join(', ')}</li>
-                          )}
-                      </ul>
-                  )}
-              </div>
-          )}
-      </div>
-      {/* --- Toplu Mining Bölümü Bitti --- */}
-
-      {/* Aktif Mining Oturumları Gösterimi (Güncellendi) */}
-      {activeMiningSessions.length > 0 ? (
-        (() => {
-          // En yakın bitiş zamanını bulma mantığı kaldırıldı, useEffect içinde yapılıyor
-          // const nextFinishingSession = ...
-          // const nextFinishTime = ...
-
-          return (
-            <div className="bg-gradient-to-r from-[#1a1a2e]/70 via-[#16213e]/70 to-[#0f3460]/70 rounded-xl p-4 mb-5 shadow-md border border-[#2a3855]">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-semibold text-white flex items-center">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2 text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                   </svg>
-                   {activeMiningSessions.length} Araç Miningde
-                </h3>
-                <span className="text-xs text-gray-400">Toplam Kapasite: {garages.reduce((sum, g) => sum + g.capacity, 0)}</span>
-              </div>
-
-              {/* En Yakın Bitiş Süresi (Dinamik state'i kullan) */} 
-              <div className="text-center text-sm text-gray-300 mb-2">
-                   Sonraki Bitiş: <span className="font-semibold text-white tabular-nums">{nextFinishTimeString}</span>
-              </div>
-
-               {/* İsteğe bağlı: Aktif oturumların küçük bir listesi veya özet bilgisi buraya eklenebilir */} 
-               {/* Şimdilik sadece sayı gösteriyoruz */} 
-               <p className="text-xs text-center text-gray-400 mt-2">Detaylar ve ödül toplama için Araçlarım sayfasına gidin.</p> 
-               {/* Eski Ödül Topla butonu kaldırıldı */}
+          {transactions.length === 0 ? (
+            <div className="text-center py-5 text-gray-400">
+              <p>Henüz işlem kaydı bulunmuyor.</p>
             </div>
-          );
-        })()
-      ) : (
-         // Aktif mining yoksa...
-         <div className="text-center p-4 mb-5 text-gray-500 text-sm">
-             Şu anda aktif mining görevi yok. Yukarıdan uygun araçları başlatabilirsiniz.
-         </div>
-      )}
-      {/* --- Aktif Mining Gösterimi Bitti --- */}
-
-      <div className="grid gap-4 grid-cols-2 mb-5">
-        <Link href="/gamefi/wallet" className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-xl p-4 shadow-md border border-[#2a3855] transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/20">
-          <p className="text-xs text-gray-400">Toplam Bakiye</p>
-          <h3 className="text-xl font-bold text-[#2ff7c1]">{currentUser ? formatCurrency(currentUser.balance) : '0.00'}</h3>
-          <div className="flex items-center gap-1 mt-1">
-            <span className="text-xs bg-[#2ff7c1]/20 text-[#2ff7c1] px-2 py-0.5 rounded-full">
-              {transactions.length > 0 && transactions[0].type === 'reward' ? '+' : ''}
-              {transactions.length > 0 ? transactions[0].amount.toFixed(2) : '0.00'}
-            </span>
-            <span className="text-xs text-gray-400">son işlem</span>
-          </div>
-        </Link>
-        
-        <Link href="/gamefi/stats" className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-xl p-4 shadow-md border border-[#2a3855] transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/20">
-          <p className="text-xs text-gray-400">Toplam XP</p>
-          <h3 className="text-xl font-bold text-[#7b2ff7]">{currentUser ? formatNumber(currentUser.xp) : '0'}</h3>
-          <div className="flex items-center gap-1 mt-1">
-            <span className="text-xs bg-[#7b2ff7]/20 text-[#7b2ff7] px-2 py-0.5 rounded-full">
-              {currentUser ? `Seviye ${currentUser.level}` : 'Seviye 1'}
-            </span>
-          </div>
-        </Link>
-      </div>
-      
-      <div className="grid gap-4 grid-cols-2 mb-5">
-        <Link href="/gamefi/car" className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-xl p-4 flex flex-col items-center border border-[#2a3855] transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/20">
-          <div className="mb-2 bg-gradient-to-r from-[#7b2ff7]/30 to-[#2f7bf7]/30 w-14 h-14 rounded-full flex items-center justify-center shadow-md">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#2ff7c1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-          </div>
-          <p className="font-semibold text-white">Araçlarım</p>
-          <p className="text-xs text-gray-400 mt-1">{userCars.length} Araç</p>
-        </Link>
-        
-        <Link href="/gamefi/garage" className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-xl p-4 flex flex-col items-center border border-[#2a3855] transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/20">
-          <div className="mb-2 bg-gradient-to-r from-[#7b2ff7]/30 to-[#2f7bf7]/30 w-14 h-14 rounded-full flex items-center justify-center shadow-md">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#2ff7c1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-            </svg>
-          </div>
-          <p className="font-semibold text-white">Garajlarım</p>
-          <p className="text-xs text-gray-400 mt-1">{garages.length} Garaj</p>
-        </Link>
-      </div>
-      
-      <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-xl p-4 shadow-md border border-[#2a3855]">
-        <h3 className="text-lg font-semibold mb-3 text-white">Son İşlemler</h3>
-        {transactions.length > 0 ? (
-          <div className="space-y-3">
-            {transactions.map(transaction => (
-              <div key={transaction.id} className="flex items-center justify-between bg-[#1a1a2e]/80 p-3 rounded-lg border border-[#2a3855]/50 transition-all duration-300 hover:shadow-sm hover:shadow-[#7b2ff7]/20">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-md shadow-md ${getTransactionBgClass(transaction.type)}`}>
-                    {getTransactionIcon(transaction.type)}
-                  </div>
-                  <div>
-                    <p className="font-medium text-white">{getTransactionLabel(transaction)}</p>
-                    <p className="text-xs text-gray-400">{formatDate(transaction.date)}</p>
+          ) : (
+            <div className="space-y-2">
+              {transactions.map(transaction => (
+                <div 
+                  key={transaction.id} 
+                  className={`p-3 rounded-lg ${getTransactionBgClass(transaction.type)}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${getTransactionBgClass(transaction.type)}`}>
+                        {getTransactionIcon(transaction.type)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-white">{getTransactionLabel(transaction)}</p>
+                        <p className="text-xs text-gray-400">{formatDate(transaction.created_at)}</p>
+                      </div>
+                    </div>
+                    <div className={`text-right font-medium ${getTransactionAmountClass(transaction.type)}`}>
+                      {transaction.type === 'deposit' ? '+' : transaction.type === 'withdraw' ? '-' : ''}
+                      {formatCurrency(transaction.amount)} NMFP
+                    </div>
                   </div>
                 </div>
-                <span className={getTransactionAmountClass(transaction.type)}>
-                  {transaction.type === 'reward' || transaction.type === 'deposit' ? '+' : '-'}
-                  {formatCurrency(transaction.amount)}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="text-center py-8 bg-[#1a1a2e]/80 rounded-lg border border-[#2a3855]/50">
-            <p className="text-gray-400 mb-2">Henüz işlem bulunmuyor</p>
-            <Link 
-              href="/gamefi/wallet"
-              className="text-sm text-[#2ff7c1] hover:underline"
-            >
-              İşlem geçmişine git
-            </Link>
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

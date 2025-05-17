@@ -7,7 +7,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "start:bot": "node server.js"
+    "start:bot": "node server.js",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "supabase:link": "supabase link",
+    "supabase:login": "supabase login",
+    "supabase:newmigration": "supabase migration new",
+    "supabase:push": "supabase db push",
+    "supabase:gamefi:migrations": "supabase migration new gamefi-update",
+    "supabase:gamefi:functions": "supabase functions new gamefi-helper",
+    "supabase:gamefi:pull-types": "supabase gen types typescript --local > src/types/supabase.ts",
+    "supabase:db:pull": "supabase db pull"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.15.1",
@@ -44,6 +55,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
+    "supabase": "^1.145.2",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
