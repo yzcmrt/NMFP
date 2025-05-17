@@ -342,73 +342,66 @@ export default function TelegramInitProvider({
 
     setIsLoading(true);
     try {
-      // RPC çağrısı yap ve dönen veriyi al
-      const { data: rpcResponse, error: rpcError } = await supabase.rpc('get_or_create_user', {
-        p_telegram_id: String(tgUser.id),
-        p_username: tgUser.username || null,
-      });
+      console.log('[TelegramInitProvider] fetchOrCreateUserAndUpdateState başladı, Telegram ID:', tgUser.id);
       
-      console.log('[TelegramInitProvider] get_or_create_user RPC result:', rpcResponse);
-
-      if (rpcError) {
-        console.error('[TelegramInitProvider] get_or_create_user RPC Hatası:', rpcError);
-        throw new Error(`Supabase RPC hatası: ${rpcError.message}`);
+      // userService kullanımı öncesi userService var mı kontrol et
+      if (!userService || !userService.getOrCreateUser) {
+        console.error('[TelegramInitProvider] userService veya getOrCreateUser metodu bulunamadı');
+        throw new Error('Servis hatası: userService bulunamadı');
       }
       
-      if (!rpcResponse || !rpcResponse.user_id) {
-         console.error('[TelegramInitProvider] RPC yanıtında user_id eksik:', rpcResponse);
-        throw new Error('Kullanıcı ID alınamadı.');
-      }
-
-      // --- JWT / setSession KODU KALDIRILDI --- 
-      // Token kontrolü ve supabase.auth.setSession çağrısı kaldırıldı.
-      // Supabase istemcisi artık anonim anahtarla çalışacak.
-      // RLS politikalarının buna göre ayarlanması GEREKLİ.
-
-      // Supabase'dan kullanıcı detaylarını çek (RPC'den gelen user_id ile)
-      const userDetails = await userService.getUserById(rpcResponse.user_id);
-      if (!userDetails) {
-        console.error('[TelegramInitProvider] Supabase kullanıcı detayları alınamadı.');
-        setError('Kullanıcı veritabanı bilgisi alınamadı veya oluşturulamadı.');
-        setUser(null); // Hata durumunda kullanıcıyı temizle
-        return;
-      }
-
-      console.log(`[TelegramInitProvider] Supabase User alindi, state'e set ediliyor:`, userDetails);
-      setUser(userDetails);
-      console.log(`[TelegramInitProvider] Yeni kullanıcı mı? ${rpcResponse.is_new}. Kullanıcı ID: ${userDetails.id}`); 
-      
-      // *** YENİ KULLANICI İSE VARLIKLARI VER ***
-      if (rpcResponse.is_new) { 
-        console.log('[TelegramInitProvider] Yeni kullanıcı tespit edildi, grant_initial_assets RPC çağrılıyor...');
-        try {
-          const { error: grantError } = await supabase.rpc('grant_initial_assets', {
-              p_user_id: userDetails.id, // Doğru UUID'yi kullan
-              p_is_premium: userDetails.is_premium || false // Kullanıcının premium durumunu al
-          });
-          if (grantError) {
-               console.error('[TelegramInitProvider] grant_initial_assets RPC hatası:', grantError);
-               // Hata olsa bile devam et, loglandı. İsteğe bağlı olarak toast gösterilebilir.
-               toast.error(`Başlangıç varlıkları ayarlanırken bir sorun oluştu: ${grantError.message}`);
-          } else {
-               console.log('[TelegramInitProvider] grant_initial_assets RPC başarıyla çağrıldı.');
-               // Başarı mesajı veya varlıkların güncellenmesi için kullanıcı verisini tekrar çekme burada yapılabilir.
-               // Örneğin: const refreshedUser = await userService.getUserById(userDetails.id); if (refreshedUser) setUser(refreshedUser);
-               toast.success('Hesabınıza başlangıç hediyeleri eklendi!');
-               // Kullanıcı state'ini hemen güncellemek için bakiyeyi manuel ekleyebilir veya tekrar çekebiliriz.
-               // Şimdilik sadece RPC çağrısını yapıyoruz, bakiye vb. sonraki veri çekmelerde güncellenmeli.
-          }
-        } catch (rpcCatchError: any) {
-             console.error('[TelegramInitProvider] grant_initial_assets RPC çağrılırken catch hatası:', rpcCatchError);
-             toast.error('Başlangıç varlıkları verilirken kritik bir hata oluştu.');
+      // Kullanıcıyı getir veya oluştur
+      try {
+        const userData = await userService.getOrCreateUser(String(tgUser.id), tgUser.username);
+        console.log('[TelegramInitProvider] getOrCreateUser sonucu:', userData);
+        
+        if (!userData || !userData.id) {
+          console.error('[TelegramInitProvider] Geçersiz kullanıcı verisi alındı:', userData);
+          throw new Error('Geçersiz kullanıcı verisi');
         }
+        
+        // Kullanıcı state'ini güncelle
+        setUser(userData);
+        console.log('[TelegramInitProvider] User state güncellendi:', userData);
+        
+        // Yeni kullanıcı ise, başlangıç varlıklarını ver
+        if (userData.isNew) {
+          console.log('[TelegramInitProvider] Yeni kullanıcı tespit edildi, varlıklar ekleniyor...');
+          
+          try {
+            const { error: grantError } = await supabase.rpc('grant_initial_assets', {
+              p_user_id: userData.id,
+              p_is_premium: userData.premium_active || false
+            });
+            
+            if (grantError) {
+              console.error('[TelegramInitProvider] grant_initial_assets RPC hatası:', grantError);
+              toast.error('Başlangıç varlıkları eklenirken bir sorun oluştu');
+            } else {
+              console.log('[TelegramInitProvider] Başlangıç varlıkları başarıyla eklendi');
+              toast.success('Hoş geldiniz! Başlangıç hediyeleri hesabınıza eklendi.');
+              
+              // Güncel bakiyeyi almak için kullanıcıyı tekrar sorgula
+              const refreshedUser = await userService.getUserById(userData.id);
+              if (refreshedUser) {
+                console.log('[TelegramInitProvider] Kullanıcı verisi yenilendi:', refreshedUser);
+                setUser(refreshedUser);
+              }
+            }
+          } catch (assetError) {
+            console.error('[TelegramInitProvider] Varlık ekleme hatası:', assetError);
+          }
+        }
+      } catch (userServiceError) {
+        console.error('[TelegramInitProvider] userService.getOrCreateUser hatası:', userServiceError);
+        throw userServiceError;
       }
-      // *** VARLIK VERME BİTİŞİ ***
-
     } catch (err: any) {
       console.error('[TelegramInitProvider] fetchOrCreateUser error:', err);
       setError(err.message || 'Kullanıcı getirilirken/oluşturulurken hata oluştu.');
       setUser(null); // Hata durumunda kullanıcıyı temizle
+    } finally {
+      setIsLoading(false);
     }
   };
 
