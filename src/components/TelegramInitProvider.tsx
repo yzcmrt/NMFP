@@ -352,26 +352,33 @@ export default function TelegramInitProvider({
       
       // Kullanıcıyı getir veya oluştur
       try {
-        const userData = await userService.getOrCreateUser(String(tgUser.id), tgUser.username);
-        console.log('[TelegramInitProvider] getOrCreateUser sonucu:', userData);
+        const response = await userService.getOrCreateUser(String(tgUser.id), tgUser.username);
+        console.log('[TelegramInitProvider] getOrCreateUser sonucu:', response);
         
-        if (!userData || !userData.id) {
-          console.error('[TelegramInitProvider] Geçersiz kullanıcı verisi alındı:', userData);
+        // Dönen veri yapısını kontrol et - {user: {...}, isNew: boolean} şeklinde bir yapı bekliyoruz
+        if (!response || !response.user || !response.user.id) {
+          console.error('[TelegramInitProvider] Geçersiz kullanıcı verisi alındı:', response);
           throw new Error('Geçersiz kullanıcı verisi');
         }
+        
+        const userData = response.user;
+        const isNewUser = !!response.isNew;
         
         // Kullanıcı state'ini güncelle
         setUser(userData);
         console.log('[TelegramInitProvider] User state güncellendi:', userData);
         
         // Yeni kullanıcı ise, başlangıç varlıklarını ver
-        if (userData.isNew) {
+        if (isNewUser) {
           console.log('[TelegramInitProvider] Yeni kullanıcı tespit edildi, varlıklar ekleniyor...');
           
           try {
+            const isPremium = tgUser.is_premium || false;
+            console.log('[TelegramInitProvider] Kullanıcı premium durumu:', isPremium);
+            
             const { error: grantError } = await supabase.rpc('grant_initial_assets', {
               p_user_id: userData.id,
-              p_is_premium: userData.premium_active || false
+              p_is_premium: isPremium
             });
             
             if (grantError) {
@@ -379,13 +386,23 @@ export default function TelegramInitProvider({
               toast.error('Başlangıç varlıkları eklenirken bir sorun oluştu');
             } else {
               console.log('[TelegramInitProvider] Başlangıç varlıkları başarıyla eklendi');
-              toast.success('Hoş geldiniz! Başlangıç hediyeleri hesabınıza eklendi.');
+              let welcomeMessage = 'Hoş geldiniz! 25.000 NMFP, 1 adet 718 Cayman ve 3 araçlık garaj hesabınıza eklendi.';
+              
+              if (isPremium) {
+                welcomeMessage = 'Hoş geldiniz Premium üye! 100.000 NMFP, 1 adet 911 Carrera, 1 adet 718 Cayman ve 5 araçlık garaj hesabınıza eklendi.';
+              }
+              
+              toast.success(welcomeMessage);
               
               // Güncel bakiyeyi almak için kullanıcıyı tekrar sorgula
-              const refreshedUser = await userService.getUserById(userData.id);
-              if (refreshedUser) {
-                console.log('[TelegramInitProvider] Kullanıcı verisi yenilendi:', refreshedUser);
-                setUser(refreshedUser);
+              try {
+                const refreshedUserResponse = await userService.getUserById(userData.id);
+                if (refreshedUserResponse && refreshedUserResponse.id) {
+                  console.log('[TelegramInitProvider] Kullanıcı verisi yenilendi:', refreshedUserResponse);
+                  setUser(refreshedUserResponse);
+                }
+              } catch (refreshError) {
+                console.error('[TelegramInitProvider] Kullanıcı verisi yenilenirken hata:', refreshError);
               }
             }
           } catch (assetError) {

@@ -8,22 +8,24 @@ SECURITY DEFINER
 AS $$
 DECLARE
     -- Premium Kullanıcı Varlıkları
-    v_premium_car_model_id UUID := '845c6f7b-f3de-4022-a291-a2ad3065535f'; -- 911 Carrera S (Rare) ID - Güncellendi
+    v_premium_car_model_id UUID := '845c6f7b-f3de-4022-a291-a2ad3065535f'; -- 911 Carrera S (Rare) ID
     v_premium_garage_template_id TEXT := 'nmfp-5'; -- 5 Araçlık Garaj Template ID
-    v_premium_initial_balance BIGINT := 25000;
+    v_premium_initial_balance BIGINT := 100000; -- 100.000 NMFP olarak güncellendi
     -- Normal Kullanıcı Varlıkları
-    v_normal_car_model_id UUID := '2fbdc616-eaa7-4019-a976-75c08fac2497'; -- 718 Cayman (Common) ID - Güncellendi
+    v_normal_car_model_id UUID := '2fbdc616-eaa7-4019-a976-75c08fac2497'; -- 718 Cayman (Common) ID
     v_normal_garage_template_id TEXT := 'nmfp-3'; -- 3 Araçlık Garaj Template ID
-    v_normal_initial_balance BIGINT := 10000;
+    v_normal_initial_balance BIGINT := 25000; -- 25.000 NMFP olarak güncellendi
     -- Seçilen Varlıklar
     v_selected_car_model_id UUID;
     v_selected_garage_template_id TEXT;
     v_selected_initial_balance BIGINT;
+    v_additional_car_model_id UUID; -- Premium kullanıcı için ekstra araba
     -- Yardımcı Değişkenler
     v_car_name TEXT;
     v_garage_template RECORD; -- Garaj şablonu bilgilerini almak için
     v_now TIMESTAMP WITH TIME ZONE := get_utc_now();
     v_car_inserted BOOLEAN := FALSE;
+    v_additional_car_inserted BOOLEAN := FALSE;
     v_garage_inserted BOOLEAN := FALSE;
     v_balance_updated BOOLEAN := FALSE;
     v_final_balance BIGINT;
@@ -33,11 +35,13 @@ BEGIN
     -- Kullanıcı tipine göre varlıkları seç
     IF p_is_premium THEN
         v_selected_car_model_id := v_premium_car_model_id;
+        v_additional_car_model_id := v_normal_car_model_id; -- Premium kullanıcı normal aracı da alır
         v_selected_garage_template_id := v_premium_garage_template_id;
         v_selected_initial_balance := v_premium_initial_balance;
         RAISE NOTICE '[grant_initial_assets] Premium kullanıcı varlıkları seçildi.';
     ELSE
         v_selected_car_model_id := v_normal_car_model_id;
+        v_additional_car_model_id := NULL; -- Normal kullanıcıya ekstra araba yok
         v_selected_garage_template_id := v_normal_garage_template_id;
         v_selected_initial_balance := v_normal_initial_balance;
         RAISE NOTICE '[grant_initial_assets] Normal kullanıcı varlıkları seçildi.';
@@ -70,6 +74,36 @@ BEGIN
         END IF;
     EXCEPTION WHEN OTHERS THEN RAISE WARNING '[grant_initial_assets] Arac ekleme hatasi: %', SQLERRM;
     END;
+
+    -- 1.1 Premium kullanıcılar için ek araç (718 Cayman)
+    IF p_is_premium AND v_additional_car_model_id IS NOT NULL THEN
+        BEGIN
+            -- Ek aracın adını al
+            SELECT name INTO v_car_name FROM public.car_models WHERE id = v_additional_car_model_id;
+            IF NOT FOUND THEN
+                RAISE WARNING '[grant_initial_assets] Ek araç modeli IDsi (%) bulunamadı!', v_additional_car_model_id;
+            ELSE
+                RAISE NOTICE '[grant_initial_assets] Ek araç modeli bulundu: ID=%, Name=%', v_additional_car_model_id, v_car_name;
+                -- Kullanıcıya bu arabayı ver (user_cars tablosuna ekle)
+                INSERT INTO public.user_cars (
+                    user_id, car_model_id, name, purchase_type, level, fuel, condition, status, mining_multiplier, created_at, updated_at
+                ) VALUES (
+                    p_user_id, v_additional_car_model_id, v_car_name || ' (Premium Hediye)', 'INITIAL', 1, 100, 100, 'active', 1.0, v_now, v_now
+                ) ON CONFLICT (user_id, car_model_id) DO NOTHING; -- Aynı modelden varsa ekleme
+
+                GET DIAGNOSTICS v_additional_car_inserted = ROW_COUNT; -- Ekleme başarılı oldu mu?
+                IF v_additional_car_inserted THEN
+                    RAISE NOTICE '[grant_initial_assets] Ek araç kaydı eklendi.';
+                    -- İşlemi kaydet
+                    INSERT INTO public.transactions (user_id, type, amount, currency, status, item, source, date)
+                    VALUES (p_user_id, 'reward', 0, 'NMFP', 'confirmed', v_car_name || ' (Premium Hediye)', 'Premium Hediye', v_now);
+                ELSE
+                    RAISE NOTICE '[grant_initial_assets] Ek araç kaydı zaten mevcut veya eklenemedi.';
+                END IF;
+            END IF;
+        EXCEPTION WHEN OTHERS THEN RAISE WARNING '[grant_initial_assets] Ek araç ekleme hatası: %', SQLERRM;
+        END;
+    END IF;
 
     -- 2. Başlangıç Garajı
     BEGIN

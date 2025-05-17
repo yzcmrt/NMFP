@@ -13,6 +13,12 @@ export enum CarStatus {
   // Veya TEXT mi? Şimdilik TEXT varsayıyoruz.
 }
 
+export enum MiningStatus {
+  ACTIVE = 'active',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled'
+}
+
 export enum TransactionStatus {
   PENDING = 'pending',
   CONFIRMED = 'confirmed',
