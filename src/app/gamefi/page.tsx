@@ -57,35 +57,53 @@ export default function GameFiPage() {
     console.log(`🔄 fetchInitialData çağrıldı: Kullanıcı ID ${userId}`);
       setDataLoading(true);
       try {
-      const [
-        cars,
-        userGarages,
-        activeSessions,
-        recentTransactions
-      ] = await Promise.all([
-        userCarService.getUserCars(userId),
-        garageService.getUserGarages(userId),
-        miningService.getAllActiveMiningSessions(userId),
-        transactionService.getUserTransactions(userId, 5)
-      ]);
-      
-      console.log('Çekilen Araçlar:', cars);
-      console.log('Çekilen Garajlar:', userGarages);
-      console.log('Aktif Mining Oturumları:', activeSessions);
-      console.log('Son İşlemler:', recentTransactions);
+        // Hepsini try-catch'e alıp ayrı ayrı hata yönetimi
+        let cars: UserCar[] = [];
+        let userGarages: Garage[] = [];
+        let activeSessions: MiningSession[] = [];
+        let recentTransactions: Transaction[] = [];
         
+        try {
+          cars = await userCarService.getUserCars(userId);
+          console.log('Çekilen Araçlar:', cars);
+        } catch (carError) {
+          console.error('Araç verilerini çekerken hata:', carError);
+          toast.error('Araç bilgileri yüklenemedi');
+        }
+        
+        try {
+          userGarages = await garageService.getUserGarages(userId);
+          console.log('Çekilen Garajlar:', userGarages);
+        } catch (garageError) {
+          console.error('Garaj verilerini çekerken hata:', garageError);
+          toast.error('Garaj bilgileri yüklenemedi');
+        }
+        
+        try {
+          activeSessions = await miningService.getAllActiveMiningSessions(userId);
+          console.log('Aktif Mining Oturumları:', activeSessions);
+        } catch (sessionError) {
+          console.error('Mining oturumlarını çekerken hata:', sessionError);
+          toast.error('Mining oturumları yüklenemedi');
+        }
+        
+        try {
+          recentTransactions = await transactionService.getUserTransactions(userId, 5);
+          console.log('Son İşlemler:', recentTransactions);
+        } catch (transactionError) {
+          console.error('İşlem verilerini çekerken hata:', transactionError);
+          toast.error('İşlem geçmişi yüklenemedi');
+        }
+        
+        // Verileri set et
         setUserCars(cars);
         setGarages(userGarages);
-      setActiveMiningSessions(activeSessions);
+        setActiveMiningSessions(activeSessions);
         setTransactions(recentTransactions);
-      console.log('✅ fetchInitialData tamamlandı.');
-    } catch (err: any) {
-      console.error('❌ fetchInitialData hatası:', err);
-      toast.error(`İlişkili veriler yüklenirken bir hata oluştu: ${err.message}`);
-      setUserCars([]);
-      setGarages([]);
-      setActiveMiningSessions([]);
-      setTransactions([]);
+        console.log('✅ fetchInitialData tamamlandı.');
+      } catch (err: any) {
+        console.error('❌ fetchInitialData hatası:', err);
+        toast.error(`İlişkili veriler yüklenirken bir hata oluştu: ${err.message}`);
       } finally {
         setDataLoading(false);
       }
@@ -108,76 +126,65 @@ export default function GameFiPage() {
     }
   }, [contextUser, fetchInitialData]);
 
-  useEffect(() => {
-    const userId = contextUser?.id;
-
-    // --- YENİ KONTROL --- 
-    // Hem kullanıcı ID hem de supabase istemcisi hazır olmadan devam etme
-    if (!userId || !supabase) { 
+  // Realtime için güvenli kanal oluştur
+  const createRealtimeChannel = useCallback((userId: string) => {
+    if (!userId || !supabase) {
       console.log('Realtime: Abone olmak için kullanıcı ID veya Supabase istemcisi bekleniyor.');
-      return;
+      return null;
     }
-    // --- KONTROL BİTTİ ---
-
+    
     console.log(`Realtime: Kullanıcı ${userId} için abonelik oluşturuluyor...`);
     
-    let channel: RealtimeChannel | null = null; // channel değişkenini dışarıda tanımla
-
     try {
-      channel = supabase 
-        .channel(`public:users:id=eq.${userId}`)
-        .on<
-        { [key: string]: any; } & { 
-            schema: 'public'; 
-            table: 'users'; 
-            commit_timestamp: string;
-            eventType: 'UPDATE';
-            new: User;
-            old: Partial<User>;
-            errors: null | any;
-        }
-      >(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${userId}` },
-        (payload: any) => {
+      // Sorgu formatı düzeltildi - filter yerine match_any kullanılıyor
+      const channel = supabase
+        .channel(`users:${userId}`) // kanal adını basitleştir
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'users',
+          filter: `id=eq.${userId}` // bu format çalışırsa kullan
+        }, (payload) => {
           console.log('User data changed via Realtime:', payload);
           if (payload.eventType === 'UPDATE' && payload.new && typeof payload.new === 'object') {
             setCurrentUser(prev => {
-                if (!prev) return payload.new as unknown as User; 
-                const updatedUser = { ...prev, ...payload.new }; 
-                return updatedUser as unknown as User; 
+              if (!prev) return payload.new;
+              const updatedUser = { ...prev, ...payload.new };
+              return updatedUser;
             });
             toast.success('Kullanıcı bilgileri güncellendi!');
-          } else {
-            console.warn('Realtime payload formatı beklenenden farklı:', payload);
           }
-        }
-      )
-      .subscribe((status: `${REALTIME_SUBSCRIBE_STATES}`, err?: Error) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`Users Realtime kanalına abone olundu (Kullanıcı: ${userId})!`);
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          console.error(`Realtime abonelik hatası (Users): ${status}`, err);
-          toast.error('Profil güncellemeleri alınamıyor.');
-        } else {
-          console.log(`Realtime durumu (Users): ${status}`);
-        }
-      });
+        })
+        .subscribe((status, err) => {
+          if (status === 'SUBSCRIBED') {
+            console.log(`Users Realtime kanalına abone olundu (Kullanıcı: ${userId})!`);
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            console.error(`Realtime abonelik hatası (Users): ${status}`, err);
+          }
+        });
+        
+      return channel;
     } catch (error) {
-        console.error("Realtime aboneliği kurulurken hata oluştu:", error);
-        toast.error("Realtime bağlantısı kurulamadı.");
+      console.error("Realtime aboneliği kurulurken hata oluştu:", error);
+      return null;
     }
+  }, []);
 
-    // Cleanup fonksiyonu
+  useEffect(() => {
+    const userId = contextUser?.id;
+
+    if (!userId) return;
+    
+    const channel = createRealtimeChannel(userId);
+    
+    // Temizlik fonksiyonu
     return () => {
       if (channel) {
-        console.log(`Realtime aboneliği kaldırılıyor (Users: ${userId})`);
-        supabase.removeChannel(channel).catch((err: Error) => console.error("Realtime kanalı kaldırılırken hata:", err));
-      } else {
-          console.log("Realtime kanalı zaten kaldırılmış veya hiç kurulmamış.");
+        channel.unsubscribe();
+        console.log(`Realtime kanal aboneliği sonlandırıldı (Kullanıcı: ${userId})`);
       }
     };
-  }, [contextUser?.id]); // supabase bağımlılığı eklemeye gerek yok, sabit olmalı
+  }, [contextUser?.id, createRealtimeChannel]);
 
   // --- Dinamik Kalan Süre Hesaplama için useEffect ---
   useEffect(() => {

@@ -350,6 +350,8 @@ export const miningService = {
   // YENİ: Kullanıcının TÜM aktif mining oturumlarını getir
   getAllActiveMiningSessions: async (userId: string): Promise<MiningSession[]> => {
     try {
+      console.log(`[getAllActiveMiningSessions] Kullanıcı ${userId} için aktif mining oturumları getiriliyor...`);
+      
       const { data, error } = await supabase
         .from('mining_sessions')
         .select(`
@@ -358,12 +360,22 @@ export const miningService = {
             garage:garages(*)
         `)
         .eq('user_id', userId)
-        .eq('status', 'active'); // Sadece aktif olanları getir
-        // .maybeSingle() kaldırıldı, birden fazla dönebilir
+        .eq('status', 'active');
 
-      if (error) throw error;
+      if (error) {
+        console.error(`[getAllActiveMiningSessions] Hata:`, error);
+        throw error;
+      }
+      
+      if (!data || data.length === 0) {
+        console.log(`[getAllActiveMiningSessions] Aktif mining oturumu bulunamadı (Kullanıcı: ${userId})`);
+        return [];
+      }
+      
+      console.log(`[getAllActiveMiningSessions] ${data.length} adet aktif mining oturumu bulundu`);
       return data as MiningSession[]; // Dizi olarak döndür
     } catch (error) {
+      console.error(`[getAllActiveMiningSessions] Beklenmeyen hata:`, error);
       handleSupabaseError(error, 'getAllActiveMiningSessions');
       return []; // Hata durumunda boş dizi
     }
