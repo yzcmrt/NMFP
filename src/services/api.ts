@@ -486,15 +486,16 @@ export const taskService = {
 // Kullanıcı API servisleri
 export const userService = {
   // Kullanıcıyı getir veya oluştur
-  getOrCreateUser: async (telegramId: string, username?: string | null, isPremium?: boolean): Promise<{ user: User | null, isNew: boolean }> => {
+  getOrCreateUser: async (telegramId: string, username?: string | null, isPremium?: boolean, forceCreate: boolean = false): Promise<{ user: User | null, isNew: boolean }> => {
     try {
-      console.log('[api.ts] getOrCreateUser called with telegramId:', telegramId, 'isPremium:', isPremium);
+      console.log('[api.ts] getOrCreateUser called with telegramId:', telegramId, 'isPremium:', isPremium, 'forceCreate:', forceCreate);
       
       // RPC çağrısı yap
       const { data, error } = await supabase.rpc('get_or_create_user', {
         p_telegram_id: telegramId,
         p_username: username,
-        p_is_premium: isPremium || false // Premium durumunu gönder, varsayılan false
+        p_is_premium: isPremium || false, // Premium durumunu gönder, varsayılan false
+        p_force_create: forceCreate // Zorla oluşturma parametresi
       });
 
       if (error) {
@@ -516,17 +517,43 @@ export const userService = {
       const isNewUser: boolean = data.is_new;
       console.log(`[api.ts] Elde edilen kullanıcı bilgileri: ID=${userId}, isNew=${isNewUser}`);
 
-      // Kullanıcı detaylarını getir
-      console.log(`[getOrCreateUser] RPC sonrası kullanıcı detayları çekiliyor (getUserById): ${userId}`);
-      const userData = await userService.getUserById(userId);
+      // Kullanıcı doğrudan RPC'den dönüyorsa onu kullan
+      let userData: User | null = null;
       
-      // Kullanıcı verisi kontrolü
-      if (!userData) {
-        console.error(`[getOrCreateUser] userService.getUserById çağrısı sonrası kullanıcı verisi bulunamadı: ID ${userId}`);
-        throw new ApiError(`Kullanıcı detayları alınamadı (ID: ${userId})`, 404);
+      if (data.user) {
+        console.log(`[getOrCreateUser] RPC kullanıcı verisi döndürdü:`, data.user);
+        
+        // RPC'den dönen veriyi User tipine dönüştür
+        userData = {
+          id: data.user.id,
+          telegram_id: data.user.telegram_id,
+          username: data.user.username,
+          wallet_address: data.user.wallet_address || null,
+          balance: data.user.balance || 0,
+          ton_coins: data.user.ton_coins || '0',
+          xp: data.user.xp || 0,
+          is_premium: Boolean(data.user.is_premium) || false,
+          level: data.user.level || 1,
+          last_bonus_collected_at: data.user.last_bonus_collected_at,
+          first_login_at: data.user.first_login_at,
+          last_login: data.user.last_login,
+          created_at: data.user.created_at,
+          selected_car_id: data.user.selected_car_id,
+          selected_garage_id: data.user.selected_garage_id
+        } as User;
+      } else {
+        // Kullanıcı detaylarını ayrıca getir
+        console.log(`[getOrCreateUser] RPC sonrası kullanıcı detayları çekiliyor (getUserById): ${userId}`);
+        userData = await userService.getUserById(userId);
+        
+        // Kullanıcı verisi kontrolü
+        if (!userData) {
+          console.error(`[getOrCreateUser] userService.getUserById çağrısı sonrası kullanıcı verisi bulunamadı: ID ${userId}`);
+          throw new ApiError(`Kullanıcı detayları alınamadı (ID: ${userId})`, 404);
+        }
       }
       
-      console.log(`[getOrCreateUser] userService.getUserById başarıyla kullanıcı verisini döndürdü:`, userData);
+      console.log(`[getOrCreateUser] Kullanıcı verisi başarıyla alındı:`, userData);
       return { user: userData, isNew: isNewUser };
     } catch (error) {
       console.error('[getOrCreateUser] Hata:', error);
@@ -540,12 +567,12 @@ export const userService = {
     try {
         console.log(`[getUserById] Kullanıcı bilgisi alınıyor: ${userId}`);
         
-        // sorgu formatını düzeltelim - id yerine "id" kullanarak ve query formatını değiştirerek
+        // Doğrudan eq kullan, filter yerine
         const { data, error } = await supabase
             .from('users')
             .select('*')
-            .filter('id', 'eq', userId)
-            .maybeSingle(); // single() yerine, null dönmesi için maybeSingle() kullan
+            .eq('id', userId)
+            .maybeSingle();
 
         if (error) {
             console.error(`[getUserById] Kullanıcı bilgisi alınırken hata: ${error.message}`);
@@ -554,21 +581,31 @@ export const userService = {
         
         if (!data) {
             console.warn(`[getUserById] ID için kullanıcı bulunamadı: ${userId}`);
+            
+            // Debug için ilave sorgu yapalım
+            const debugQuery = await supabase
+                .from('users')
+                .select('id')
+                .limit(5);
+                
+            console.log(`[getUserById] Debug - İlk 5 kullanıcı ID:`, 
+                debugQuery.data?.map(u => u.id));
+                
             return null;
         }
 
         console.log(`[getUserById] Kullanıcı verisi başarıyla alındı:`, data);
         
         // Veritabanından gelen veriyi User tipine dönüştür
-        return {
+        const user: User = {
             id: data.id,
             telegram_id: data.telegram_id,
             username: data.username,
-            wallet_address: data.wallet_address,
-            balance: data.balance,
-            ton_coins: data.ton_coins,
-            xp: data.xp,
-            is_premium: data.is_premium || false,
+            wallet_address: data.wallet_address || null,
+            balance: data.balance || 0,
+            ton_coins: data.ton_coins || '0',
+            xp: data.xp || 0,
+            is_premium: Boolean(data.is_premium) || false,
             level: data.level || 1,
             last_bonus_collected_at: data.last_bonus_collected_at,
             first_login_at: data.first_login_at,
@@ -576,7 +613,9 @@ export const userService = {
             created_at: data.created_at,
             selected_car_id: data.selected_car_id,
             selected_garage_id: data.selected_garage_id
-        } as User;
+        };
+        
+        return user;
     } catch (error) {
         // Hata durumunu logla ve null döndür
         handleSupabaseError(error, `getUserById (ID: ${userId})`);

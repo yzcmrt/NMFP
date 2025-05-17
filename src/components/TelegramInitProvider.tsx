@@ -354,73 +354,88 @@ export default function TelegramInitProvider({
         throw new Error('Servis hatası: userService bulunamadı');
       }
       
-      // Kullanıcıyı getir veya oluştur
-      let retryCount = 0;
-      let userData = null;
-      let isNewUser = false;
-      
-      while (retryCount < 3 && !userData) {
-        try {
-          const response = await userService.getOrCreateUser(String(tgUser.id), tgUser.username, isPremium);
-          console.log('[TelegramInitProvider] getOrCreateUser sonucu:', response);
-          
-          if (!response) {
-            console.warn(`[TelegramInitProvider] userService.getOrCreateUser null yanıt döndürdü. Deneme: ${retryCount + 1}/3`);
-            retryCount++;
-            continue;
-          }
-          
-          if (!response.user) {
-            console.warn(`[TelegramInitProvider] userService.getOrCreateUser null kullanıcı döndürdü. Deneme: ${retryCount + 1}/3`);
-            retryCount++;
-            continue;
-          }
-          
-          userData = response.user;
-          isNewUser = response.isNew;
-          
-          if (!userData.id) {
-            console.warn(`[TelegramInitProvider] Kullanıcı verisi geçersiz ID içeriyor: ${JSON.stringify(userData)}. Deneme: ${retryCount + 1}/3`);
-            userData = null;
-            retryCount++;
-            continue;
-          }
-          
-          // Kullanıcı geçerli, döngüden çık
-          break;
-        } catch (retryError: any) {
-          console.error(`[TelegramInitProvider] Deneme ${retryCount + 1}/3 başarısız:`, retryError);
-          retryCount++;
-          
-          if (retryCount >= 3) {
-            throw retryError; // 3 deneme başarısız olursa hatayı tekrar fırlat
-          }
-          
-          // Kısa bir bekleme ekle
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-      }
-      
-      if (!userData) {
-        throw new Error('Kullanıcı verisi 3 deneme sonunda alınamadı');
-      }
-      
-      // Kullanıcı state'ini güncelle
-      setUser(userData);
-      console.log('[TelegramInitProvider] User state güncellendi:', userData);
-      
-      // Yeni kullanıcı ise, hoş geldin mesajı göster
-      if (isNewUser) {
-        console.log('[TelegramInitProvider] Yeni kullanıcı tespit edildi.');
+      // İlk deneme - Normal şekilde getir veya oluştur
+      try {
+        console.log('[TelegramInitProvider] Normal getOrCreateUser deniyor...');
+        const response = await userService.getOrCreateUser(String(tgUser.id), tgUser.username, isPremium);
         
-        let welcomeMessage = 'Hoş geldiniz! 50.000 NMFP, 1 adet 718 Cayman ve 3 araçlık garaj hesabınıza eklendi.';
+        if (response && response.user && response.user.id) {
+          // Başarılı
+          setUser(response.user);
+          console.log('[TelegramInitProvider] User state güncellendi:', response.user);
+          
+          // Yeni kullanıcı ise, hoş geldin mesajı göster
+          if (response.isNew) {
+            console.log('[TelegramInitProvider] Yeni kullanıcı tespit edildi.');
+            
+            let welcomeMessage = 'Hoş geldiniz! 50.000 NMFP, 1 adet 718 Cayman ve 3 araçlık garaj hesabınıza eklendi.';
+            
+            if (isPremium) {
+              welcomeMessage = 'Hoş geldiniz Premium üye! 100.000 NMFP, 1 adet 911 Carrera, 1 adet 718 Cayman ve 5 araçlık garaj hesabınıza eklendi.';
+            }
+            
+            toast.success(welcomeMessage);
+          }
+          
+          return; // Başarıyla tamamlandı
+        }
+        
+        // Buraya gelindiyse veri alınamadı - force_create ile zorla yeniden oluştur
+        console.warn('[TelegramInitProvider] Normal getOrCreateUser başarısız, force_create deneniyor...');
+        
+      } catch (firstTryError) {
+        console.error('[TelegramInitProvider] İlk deneme başarısız:', firstTryError);
+        // Devam edip zorla oluşturacak
+      }
+      
+      // Force create ile tekrar dene
+      try {
+        console.log('[TelegramInitProvider] FORCE CREATE ile kullanıcı oluşturuluyor...');
+        
+        // Doğrudan SQL çağrısı yaparak force_create
+        const { data: forceCreateData, error: forceCreateError } = await supabase.rpc('get_or_create_user', {
+          p_telegram_id: String(tgUser.id),
+          p_username: tgUser.username,
+          p_is_premium: isPremium,
+          p_force_create: true // Zorla oluşturulması için
+        });
+        
+        if (forceCreateError) {
+          console.error('[TelegramInitProvider] Force create RPC hatası:', forceCreateError);
+          throw new Error('Kullanıcı zorla oluşturulamadı: ' + forceCreateError.message);
+        }
+        
+        console.log('[TelegramInitProvider] Force create sonucu:', forceCreateData);
+        
+        if (!forceCreateData || !forceCreateData.user_id) {
+          throw new Error('Force create işlemi geçersiz veri döndürdü');
+        }
+        
+        // Kullanıcıyı tekrar getir
+        const userData = await userService.getUserById(forceCreateData.user_id);
+        
+        if (!userData || !userData.id) {
+          throw new Error('Force create sonrası kullanıcı getirilemedi');
+        }
+        
+        // Başarılı
+        setUser(userData);
+        console.log('[TelegramInitProvider] User state güncellendi (force create sonrası):', userData);
+        
+        // Hoş geldin mesajı
+        let welcomeMessage = 'Hoş geldiniz! Hesabınız yeniden oluşturuldu. 50.000 NMFP, 1 adet 718 Cayman ve 3 araçlık garaj hesabınıza eklendi.';
         
         if (isPremium) {
-          welcomeMessage = 'Hoş geldiniz Premium üye! 100.000 NMFP, 1 adet 911 Carrera, 1 adet 718 Cayman ve 5 araçlık garaj hesabınıza eklendi.';
+          welcomeMessage = 'Hoş geldiniz Premium üye! Hesabınız yeniden oluşturuldu. 100.000 NMFP, 1 adet 911 Carrera, 1 adet 718 Cayman ve 5 araçlık garaj hesabınıza eklendi.';
         }
         
         toast.success(welcomeMessage);
+        
+      } catch (forceCreateError: any) {
+        console.error('[TelegramInitProvider] Force create denemesi başarısız:', forceCreateError);
+        throw forceCreateError;
       }
+      
     } catch (err: any) {
       console.error('[TelegramInitProvider] fetchOrCreateUser error:', err);
       setError(err.message || 'Kullanıcı getirilirken/oluşturulurken hata oluştu.');
