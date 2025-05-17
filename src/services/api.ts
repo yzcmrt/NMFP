@@ -489,90 +489,98 @@ export const userService = {
   getOrCreateUser: async (telegramId: string, username?: string | null): Promise<{ user: User | null, isNew: boolean }> => {
     try {
       console.log('[api.ts] getOrCreateUser called with telegramId:', telegramId);
+      
+      // RPC çağrısı yap
       const { data, error } = await supabase.rpc('get_or_create_user', {
         p_telegram_id: telegramId,
         p_username: username
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[api.ts] get_or_create_user RPC hatası:', error);
+        throw error;
+      }
       console.log('[api.ts] get_or_create_user RPC result:', data);
 
-      if (!data || !data.user_id) {
-         throw new ApiError('Kullanıcı ID alınamadı.', 500, data);
+      // RPC sonucunu kontrol et
+      if (!data) {
+        throw new ApiError('get_or_create_user RPC null veri döndürdü.', 500);
+      }
+      
+      if (!data.user_id) {
+        throw new ApiError('Kullanıcı ID alınamadı.', 500, data);
       }
       
       const userId: string = data.user_id;
       const isNewUser: boolean = data.is_new;
+      console.log(`[api.ts] Elde edilen kullanıcı bilgileri: ID=${userId}, isNew=${isNewUser}`);
 
-      // Doğrudan SELECT yerine getUserById çağır (bu get_user_details RPC'sini kullanır)
+      // Kullanıcı detaylarını getir
       console.log(`[getOrCreateUser] RPC sonrası kullanıcı detayları çekiliyor (getUserById): ${userId}`);
-      const userData = await userService.getUserById(userId); 
-
-      // Hata kontrolü userError yerine userData null mu diye bakılır
+      const userData = await userService.getUserById(userId);
+      
+      // Kullanıcı verisi kontrolü
       if (!userData) {
-            console.error(`[getOrCreateUser] userService.getUserById çağrısı sonrası kullanıcı verisi bulunamadı: ID ${userId}`);
-            // Belki de grant_initial_assets henüz bitmediği için kullanıcı tam oluşmamıştır?
-            // Veya getUserById içinde bir hata oluşmuştur (loglara bakılmalı)
-            throw new ApiError(`userService.getUserById sonrasında kullanıcı verisi (ID: ${userId}) bulunamadı.`, 404);
+        console.error(`[getOrCreateUser] userService.getUserById çağrısı sonrası kullanıcı verisi bulunamadı: ID ${userId}`);
+        throw new ApiError(`Kullanıcı detayları alınamadı (ID: ${userId})`, 404);
       }
       
       console.log(`[getOrCreateUser] userService.getUserById başarıyla kullanıcı verisini döndürdü:`, userData);
-
-      return { user: userData as User, isNew: isNewUser }; // isNew değerini RPC'den al
+      return { user: userData, isNew: isNewUser };
     } catch (error) {
-      // handleSupabaseError içindeki log zaten context bilgisini içeriyor
+      console.error('[getOrCreateUser] Hata:', error);
       handleSupabaseError(error, 'getOrCreateUser');
-      return { user: null, isNew: false }; // Hata durumunda null döndür
+      return { user: null, isNew: false };
     }
   },
 
   // Kullanıcı bilgilerini getir (ID ile)
   getUserById: async (userId: string): Promise<User | null> => {
-      try {
-          // Call the secure RPC function
-          const { data, error } = await supabase.rpc('get_user_details', { 
-              p_user_id: userId 
-          });
+    try {
+        console.log(`[getUserById] Kullanıcı bilgisi alınıyor: ${userId}`);
+        
+        // RPC yerine direkt veritabanı sorgusu kullan
+        const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .single();
 
-          if (error) {
-              // Check if error indicates user not found (this might depend on the RPC implementation, 
-              // but typically Postgrest errors like PGRST116 won't apply directly to RPC unless explicitly handled)
-              // If the RPC returns null or an empty object for not found, handle that.
-              console.error(`[getUserById RPC] Error fetching user ${userId}:`, error);
-              // We might need to adjust error handling based on how the RPC signals 'not found'
-              // For now, assume any error means we can't get the user.
-              throw error; 
-          }
-          
-          // If data is null or empty (RPC might return null/empty if not found)
-          if (!data) {
-              console.warn(`[getUserById RPC] No user found for ID ${userId}`);
-              return null;
-          }
+        if (error) {
+            console.error(`[getUserById] Kullanıcı bilgisi alınırken hata: ${error.message}`);
+            throw error;
+        }
+        
+        if (!data) {
+            console.warn(`[getUserById] ID için kullanıcı bulunamadı: ${userId}`);
+            return null;
+        }
 
-          // Veritabanından gelen veriyi User tipine dönüştür
-          return {
-              id: data.id,
-              telegram_id: data.telegram_id,
-              username: data.username,
-              wallet_address: data.wallet_address,
-              balance: data.balance,
-              ton_coins: data.ton_coins,
-              xp: data.xp,
-              is_premium: data.is_premium || false,
-              level: data.level || 1,
-              last_bonus_collected_at: data.last_bonus_collected_at,
-              first_login_at: data.first_login_at,
-              last_login: data.last_login,
-              created_at: data.created_at,
-              selected_car_id: data.selected_car_id,
-              selected_garage_id: data.selected_garage_id
-          } as User;
-      } catch (error) {
-          // Pass the error to the handler, including the specific context
-          handleSupabaseError(error, `getUserById RPC (ID: ${userId})`);
-          return null;
-      }
+        console.log(`[getUserById] Kullanıcı verisi başarıyla alındı:`, data);
+        
+        // Veritabanından gelen veriyi User tipine dönüştür
+        return {
+            id: data.id,
+            telegram_id: data.telegram_id,
+            username: data.username,
+            wallet_address: data.wallet_address,
+            balance: data.balance,
+            ton_coins: data.ton_coins,
+            xp: data.xp,
+            is_premium: data.is_premium || false,
+            level: data.level || 1,
+            last_bonus_collected_at: data.last_bonus_collected_at,
+            first_login_at: data.first_login_at,
+            last_login: data.last_login,
+            created_at: data.created_at,
+            selected_car_id: data.selected_car_id,
+            selected_garage_id: data.selected_garage_id
+        } as User;
+    } catch (error) {
+        // Hata durumunu logla ve null döndür
+        handleSupabaseError(error, `getUserById (ID: ${userId})`);
+        return null;
+    }
   },
 
   // Kullanıcı bakiyesini güncelle (Backend fonksiyonları bunu halletmeli, bu nadiren kullanılır)
