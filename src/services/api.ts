@@ -486,14 +486,15 @@ export const taskService = {
 // Kullanıcı API servisleri
 export const userService = {
   // Kullanıcıyı getir veya oluştur
-  getOrCreateUser: async (telegramId: string, username?: string | null): Promise<{ user: User | null, isNew: boolean }> => {
+  getOrCreateUser: async (telegramId: string, username?: string | null, isPremium?: boolean): Promise<{ user: User | null, isNew: boolean }> => {
     try {
-      console.log('[api.ts] getOrCreateUser called with telegramId:', telegramId);
+      console.log('[api.ts] getOrCreateUser called with telegramId:', telegramId, 'isPremium:', isPremium);
       
       // RPC çağrısı yap
       const { data, error } = await supabase.rpc('get_or_create_user', {
         p_telegram_id: telegramId,
-        p_username: username
+        p_username: username,
+        p_is_premium: isPremium || false // Premium durumunu gönder, varsayılan false
       });
 
       if (error) {

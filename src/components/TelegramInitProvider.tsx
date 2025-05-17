@@ -344,6 +344,10 @@ export default function TelegramInitProvider({
     try {
       console.log('[TelegramInitProvider] fetchOrCreateUserAndUpdateState başladı, Telegram ID:', tgUser.id);
       
+      // Premium durumunu logla
+      const isPremium = tgUser.is_premium || false;
+      console.log('[TelegramInitProvider] Kullanıcı premium durumu:', isPremium);
+      
       // userService kullanımı öncesi userService var mı kontrol et
       if (!userService || !userService.getOrCreateUser) {
         console.error('[TelegramInitProvider] userService veya getOrCreateUser metodu bulunamadı');
@@ -352,7 +356,7 @@ export default function TelegramInitProvider({
       
       // Kullanıcıyı getir veya oluştur
       try {
-        const response = await userService.getOrCreateUser(String(tgUser.id), tgUser.username);
+        const response = await userService.getOrCreateUser(String(tgUser.id), tgUser.username, isPremium);
         console.log('[TelegramInitProvider] getOrCreateUser sonucu:', response);
         
         // Dönen veri yapısını kontrol et - {user: {...}, isNew: boolean} şeklinde bir yapı bekliyoruz
@@ -378,48 +382,17 @@ export default function TelegramInitProvider({
         setUser(userData);
         console.log('[TelegramInitProvider] User state güncellendi:', userData);
         
-        // Yeni kullanıcı ise, başlangıç varlıklarını ver
+        // Yeni kullanıcı ise, hoş geldin mesajı göster
         if (isNewUser) {
-          console.log('[TelegramInitProvider] Yeni kullanıcı tespit edildi, varlıklar ekleniyor...');
+          console.log('[TelegramInitProvider] Yeni kullanıcı tespit edildi.');
           
-          try {
-            const isPremium = tgUser.is_premium || false;
-            console.log('[TelegramInitProvider] Kullanıcı premium durumu:', isPremium);
-            
-            const { error: grantError } = await supabase.rpc('grant_initial_assets', {
-              p_user_id: userData.id,
-              p_is_premium: isPremium
-            });
-            
-            if (grantError) {
-              console.error('[TelegramInitProvider] grant_initial_assets RPC hatası:', grantError);
-              toast.error('Başlangıç varlıkları eklenirken bir sorun oluştu');
-            } else {
-              console.log('[TelegramInitProvider] Başlangıç varlıkları başarıyla eklendi');
-              let welcomeMessage = 'Hoş geldiniz! 25.000 NMFP, 1 adet 718 Cayman ve 3 araçlık garaj hesabınıza eklendi.';
-              
-              if (isPremium) {
-                welcomeMessage = 'Hoş geldiniz Premium üye! 100.000 NMFP, 1 adet 911 Carrera, 1 adet 718 Cayman ve 5 araçlık garaj hesabınıza eklendi.';
-              }
-              
-              toast.success(welcomeMessage);
-              
-              // Güncel bakiyeyi almak için kullanıcıyı tekrar sorgula
-              try {
-                const refreshedUserResponse = await userService.getUserById(userData.id);
-                if (refreshedUserResponse) {
-                  console.log('[TelegramInitProvider] Kullanıcı verisi yenilendi:', refreshedUserResponse);
-                  setUser(refreshedUserResponse);
-                } else {
-                  console.warn('[TelegramInitProvider] Kullanıcı verisi yenilenirken null döndü');
-                }
-              } catch (refreshError) {
-                console.error('[TelegramInitProvider] Kullanıcı verisi yenilenirken hata:', refreshError);
-              }
-            }
-          } catch (assetError) {
-            console.error('[TelegramInitProvider] Varlık ekleme hatası:', assetError);
+          let welcomeMessage = 'Hoş geldiniz! 50.000 NMFP, 1 adet 718 Cayman ve 3 araçlık garaj hesabınıza eklendi.';
+          
+          if (isPremium) {
+            welcomeMessage = 'Hoş geldiniz Premium üye! 100.000 NMFP, 1 adet 911 Carrera, 1 adet 718 Cayman ve 5 araçlık garaj hesabınıza eklendi.';
           }
+          
+          toast.success(welcomeMessage);
         }
       } catch (userServiceError) {
         console.error('[TelegramInitProvider] userService.getOrCreateUser hatası:', userServiceError);
