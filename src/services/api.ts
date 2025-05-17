@@ -540,12 +540,12 @@ export const userService = {
     try {
         console.log(`[getUserById] Kullanıcı bilgisi alınıyor: ${userId}`);
         
-        // RPC yerine direkt veritabanı sorgusu kullan
+        // sorgu formatını düzeltelim - id yerine "id" kullanarak ve query formatını değiştirerek
         const { data, error } = await supabase
             .from('users')
             .select('*')
-            .eq('id', userId)
-            .single();
+            .filter('id', 'eq', userId)
+            .maybeSingle(); // single() yerine, null dönmesi için maybeSingle() kullan
 
         if (error) {
             console.error(`[getUserById] Kullanıcı bilgisi alınırken hata: ${error.message}`);
