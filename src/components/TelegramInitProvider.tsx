@@ -356,9 +356,19 @@ export default function TelegramInitProvider({
         console.log('[TelegramInitProvider] getOrCreateUser sonucu:', response);
         
         // Dönen veri yapısını kontrol et - {user: {...}, isNew: boolean} şeklinde bir yapı bekliyoruz
-        if (!response || !response.user || !response.user.id) {
-          console.error('[TelegramInitProvider] Geçersiz kullanıcı verisi alındı:', response);
-          throw new Error('Geçersiz kullanıcı verisi');
+        if (!response) {
+          console.error('[TelegramInitProvider] userService.getOrCreateUser null yanıt döndürdü');
+          throw new Error('Kullanıcı verisi alınamadı');
+        }
+        
+        if (!response.user) {
+          console.error('[TelegramInitProvider] userService.getOrCreateUser null kullanıcı döndürdü');
+          throw new Error('Kullanıcı bulunamadı');
+        }
+        
+        if (!response.user.id) {
+          console.error('[TelegramInitProvider] userService.getOrCreateUser geçersiz kullanıcı ID döndürdü:', response.user);
+          throw new Error('Geçersiz kullanıcı verisi: ID eksik');
         }
         
         const userData = response.user;
@@ -397,9 +407,11 @@ export default function TelegramInitProvider({
               // Güncel bakiyeyi almak için kullanıcıyı tekrar sorgula
               try {
                 const refreshedUserResponse = await userService.getUserById(userData.id);
-                if (refreshedUserResponse && refreshedUserResponse.id) {
+                if (refreshedUserResponse) {
                   console.log('[TelegramInitProvider] Kullanıcı verisi yenilendi:', refreshedUserResponse);
                   setUser(refreshedUserResponse);
+                } else {
+                  console.warn('[TelegramInitProvider] Kullanıcı verisi yenilenirken null döndü');
                 }
               } catch (refreshError) {
                 console.error('[TelegramInitProvider] Kullanıcı verisi yenilenirken hata:', refreshError);

@@ -550,8 +550,24 @@ export const userService = {
               return null;
           }
 
-          // The RPC returns the full user row directly
-          return data as User | null;
+          // Veritabanından gelen veriyi User tipine dönüştür
+          return {
+              id: data.id,
+              telegram_id: data.telegram_id,
+              username: data.username,
+              wallet_address: data.wallet_address,
+              balance: data.balance,
+              ton_coins: data.ton_coins,
+              xp: data.xp,
+              is_premium: data.is_premium || false,
+              level: data.level || 1,
+              last_bonus_collected_at: data.last_bonus_collected_at,
+              first_login_at: data.first_login_at,
+              last_login: data.last_login,
+              created_at: data.created_at,
+              selected_car_id: data.selected_car_id,
+              selected_garage_id: data.selected_garage_id
+          } as User;
       } catch (error) {
           // Pass the error to the handler, including the specific context
           handleSupabaseError(error, `getUserById RPC (ID: ${userId})`);
