@@ -88,9 +88,10 @@ export interface UserCar {
   repair_end_time?: string | null; // TIMESTAMP WITH TIME ZONE
   created_at: string;           // TIMESTAMP WITH TIME ZONE DEFAULT NOW()
   updated_at: string;           // TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  level: number;                // INTEGER DEFAULT 1
 
   // İlişkisel veri (opsiyonel, join ile gelirse)
-  car_model?: CarModel;         // car_models ile ilişki
+  car_model?: CarModel;         // car_models ile ilişki (view_user_cars_with_models)
 }
 
 /** 
@@ -134,16 +135,20 @@ export interface GarageTemplate {
 export interface Garage {
   id: number;                   // SERIAL Primary Key
   user_id: string;              // UUID REFERENCES users(id) (Artık null olamaz)
+  template_id: string;          // TEXT REFERENCES garage_templates(id)
   name: string;                 // TEXT NOT NULL (Genellikle şablon adından türetilir)
-  image_url: string | null;     // TEXT (Kullanıcı garajı tablosundaki sütun adı? Belki 'image'?)
+  description?: string | null;  // TEXT
+  image_url: string | null;     // TEXT (Kullanıcı garajı tablosundaki sütun adı)
   capacity: number;             // INTEGER NOT NULL
   daily_bonus: number;          // BIGINT NOT NULL
   level: number;                // INTEGER DEFAULT 1
+  value: number;                // BIGINT DEFAULT 0
+  purchase_type: string;        // TEXT NOT NULL
   location?: string | null;     // TEXT
-  // template_id?: string | null; // Bu bilgi kullanıcı garajında tutuluyor mu? Opsiyonel olabilir.
   created_at: string;           // TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-  // Kullanıcı garajları için fiyat bilgisi genellikle anlamsızdır.
-  // value, nmfp_price, ton_price, purchase_type kaldırıldı.
+  
+  // İlişkisel veri (view_garages_with_templates)
+  garage_template?: GarageTemplate; // garage_templates ile ilişki
 }
 
 /** 

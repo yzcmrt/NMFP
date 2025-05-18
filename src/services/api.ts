@@ -111,17 +111,31 @@ export const userCarService = {
   // Kullanıcının tüm araçlarını getir (ilişkili model bilgisiyle)
   getUserCars: async (userId: string): Promise<UserCar[]> => {
     try {
+      // RPC fonksiyonunu kullan
       const { data, error } = await supabase
-        .from('user_cars')
-        .select(`
-          *,
-          car_model:car_models(*)
-        `)
-        .eq('user_id', userId);
+        .rpc('get_user_cars_with_models', {
+          p_user_id: userId
+        });
 
       if (error) throw error;
-      // Gelen veriyi UserCar tipine cast et
-      return data as UserCar[];
+      
+      // Gelen JSON veriyi dizi haline getir ve UserCar tipine cast et
+      if (data && Array.isArray(data)) {
+        console.log('getUserCars: Veri RPC fonksiyonundan başarıyla alındı', data.length);
+        return data as UserCar[];
+      } else if (data && typeof data === 'string') {
+        // JSON string olarak gelirse
+        try {
+          const parsedData = JSON.parse(data);
+          return Array.isArray(parsedData) ? parsedData : [];
+        } catch (e) {
+          console.error('getUserCars: JSON parse hatası', e);
+          return [];
+        }
+      } else {
+        console.warn('getUserCars: Beklenmeyen veri formatı', data);
+        return [];
+      }
     } catch (error) {
       handleSupabaseError(error, 'getUserCars');
       return [];
@@ -262,18 +276,34 @@ export const garageService = {
     }
   },
 
-  // Kullanıcının sahip olduğu garajları getir (garages tablosundan)
+  // Kullanıcının sahip olduğu garajları getir (RPC ile)
   getUserGarages: async (userId: string): Promise<Garage[]> => {
     try {
+      // RPC fonksiyonunu kullan
       const { data, error } = await supabase
-        .from('garages') // Correct table for user garages
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: true }); 
+        .rpc('get_user_garages_with_templates', {
+          p_user_id: userId
+        });
 
       if (error) throw error;
-      // Cast data to the simplified Garage type
-      return data as Garage[]; 
+      
+      // Gelen JSON veriyi dizi haline getir ve Garage tipine cast et
+      if (data && Array.isArray(data)) {
+        console.log('getUserGarages: Veri RPC fonksiyonundan başarıyla alındı', data.length);
+        return data as Garage[];
+      } else if (data && typeof data === 'string') {
+        // JSON string olarak gelirse
+        try {
+          const parsedData = JSON.parse(data);
+          return Array.isArray(parsedData) ? parsedData : [];
+        } catch (e) {
+          console.error('getUserGarages: JSON parse hatası', e);
+          return [];
+        }
+      } else {
+        console.warn('getUserGarages: Beklenmeyen veri formatı', data);
+        return [];
+      }
     } catch (error) {
       handleSupabaseError(error, 'getUserGarages');
       return [];
