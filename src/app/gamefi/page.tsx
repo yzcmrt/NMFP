@@ -213,6 +213,13 @@ export default function GameFiPage() {
       if (result && result.started_cars && result.started_cars > 0) {
         toast.success(`${result.started_cars} adet araç mining için başlatıldı!`, { id: toastId });
         
+        // Uyarıları göster (varsa)
+        if (result.warnings && result.warnings.length > 0) {
+          result.warnings.forEach((warning: string) => {
+            toast.warning(warning, { duration: 5000 });
+          });
+        }
+        
         // Araç ve garaj listelerini güncelle
         fetchInitialData(contextUser.id);
         
@@ -222,8 +229,19 @@ export default function GameFiPage() {
         console.log('Mining toplu başlatma sonucu:', result);
       } else if (result && result.started_cars === 0) {
         // Araç başlatılamadı
-        toast.warn('Hiçbir araç mining için başlatılamadı. Yakıt/kondisyon durumu veya yeterli garaj kapasitesi olup olmadığını kontrol edin.', 
-          { id: toastId, duration: 5000 });
+        let message = 'Hiçbir araç mining için başlatılamadı.';
+        
+        // Uyarıları mesaja ekle
+        if (result.warnings && result.warnings.length > 0) {
+          message += ' Nedenleri:';
+          result.warnings.forEach((warning: string) => {
+            toast.warning(warning, { duration: 5000 });
+          });
+        } else {
+          message += ' Yakıt/kondisyon durumu veya yeterli garaj kapasitesi olup olmadığını kontrol edin.';
+        }
+        
+        toast.warn(message, { id: toastId, duration: 5000 });
       } else {
         // Diğer hata durumları
         toast.error('Mining başlatma işlemi sırasında bir hata meydana geldi.', { id: toastId });
@@ -232,7 +250,7 @@ export default function GameFiPage() {
       console.error('Hazırla ve başlat hatası:', error);
       let errorMessage = 'Mining başlatma işlemi sırasında bir hata meydana geldi.';
       
-      // Hata mesajını kontrol et, yetersiz bakiye gibi bilinen hataları özel mesajlarla göster
+      // Hata mesajını kontrol et, bilinen hataları daha anlaşılır mesajlarla göster
       if (error.message) {
         if (error.message.includes('yetersiz bakiye') || error.message.includes('insufficient balance')) {
           errorMessage = 'Bakım için yetersiz bakiye. Lütfen daha sonra tekrar deneyin veya bakım ödeme seçeneğini kapatın.';
@@ -240,6 +258,10 @@ export default function GameFiPage() {
           errorMessage = 'Mining için uygun durumda araç bulunamadı. Araçlarınızın durumunu kontrol edin.';
         } else if (error.message.includes('garaj kapasitesi') || error.message.includes('garage capacity')) {
           errorMessage = 'Yeterli garaj kapasitesi yok. Yeni garaj satın alın veya aktif mining işlemlerinizi tamamlayın.';
+        } else if (error.message.includes('bulunamadi') || error.message.includes('not found')) {
+          errorMessage = 'Bazı araçlar bulunamadı veya bu kullanıcıya ait değil.';
+        } else if (error.message.includes('zaten mining')) {
+          errorMessage = 'Bazı araçlar zaten mining yapıyor!';
         } else {
           // Diğer hataları olduğu gibi göster
           errorMessage = error.message;
