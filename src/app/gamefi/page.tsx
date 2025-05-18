@@ -31,14 +31,12 @@ interface PrepareResult {
 }
 
 export default function GameFiPage() {
-  const { telegramUser, user: contextUser, isLoading: providerLoading, error: providerError } = useTelegram();
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { telegramUser, user: contextUser, isLoading: providerLoading, error: providerError, refreshUserData } = useTelegram();
   const [userCars, setUserCars] = useState<UserCar[]>([]);
   const [garages, setGarages] = useState<Garage[]>([]);
   const [activeMiningSessions, setActiveMiningSessions] = useState<MiningSession[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
-  const [isCompletingMining, setIsCompletingMining] = useState(false); // Bu hala bireysel tamamlama için gerekli olabilir, şimdilik kalsın
   
   // Yeni state'ler
   const [isPreparingCars, setIsPreparingCars] = useState<boolean>(false);
@@ -100,6 +98,10 @@ export default function GameFiPage() {
         setGarages(userGarages);
         setActiveMiningSessions(activeSessions);
         setTransactions(recentTransactions);
+        
+        // Kullanıcı verisini de tazeleyelim
+        await refreshUserData();
+        
         console.log('✅ fetchInitialData tamamlandı.');
       } catch (err: any) {
         console.error('❌ fetchInitialData hatası:', err);
@@ -107,17 +109,15 @@ export default function GameFiPage() {
       } finally {
         setDataLoading(false);
       }
-  }, []);
+  }, [refreshUserData]);
 
   useEffect(() => {
     console.log('GameFiPage: contextUser durumu değişti:', contextUser);
     if (contextUser) {
-      console.log('GameFiPage: contextUser mevcut, currentUser güncelleniyor ve fetchInitialData çağrılıyor.');
-      setCurrentUser(contextUser);
+      console.log('GameFiPage: contextUser mevcut, veri çekiliyor.');
       fetchInitialData(contextUser.id);
     } else {
-      console.log('GameFiPage: contextUser null, currentUser temizleniyor.');
-      setCurrentUser(null);
+      console.log('GameFiPage: contextUser null, veriler temizleniyor.');
       setUserCars([]);
       setGarages([]);
       setActiveMiningSessions([]);
@@ -126,65 +126,22 @@ export default function GameFiPage() {
     }
   }, [contextUser, fetchInitialData]);
 
-  // Realtime için güvenli kanal oluştur
-  const createRealtimeChannel = useCallback((userId: string) => {
-    if (!userId || !supabase) {
-      console.log('Realtime: Abone olmak için kullanıcı ID veya Supabase istemcisi bekleniyor.');
-      return null;
-    }
-    
-    console.log(`Realtime: Kullanıcı ${userId} için abonelik oluşturuluyor...`);
-    
-    try {
-      // Sorgu formatı düzeltildi - filter yerine match_any kullanılıyor
-      const channel = supabase
-        .channel(`users:${userId}`) // kanal adını basitleştir
-        .on('postgres_changes', {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'users',
-          filter: `id=eq.${userId}` // bu format çalışırsa kullan
-        }, (payload) => {
-          console.log('User data changed via Realtime:', payload);
-          if (payload.eventType === 'UPDATE' && payload.new && typeof payload.new === 'object') {
-            setCurrentUser(prev => {
-              if (!prev) return payload.new;
-              const updatedUser = { ...prev, ...payload.new };
-              return updatedUser;
-            });
-            toast.success('Kullanıcı bilgileri güncellendi!');
-          }
-        })
-        .subscribe((status, err) => {
-          if (status === 'SUBSCRIBED') {
-            console.log(`Users Realtime kanalına abone olundu (Kullanıcı: ${userId})!`);
-          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            console.error(`Realtime abonelik hatası (Users): ${status}`, err);
-          }
-        });
-        
-      return channel;
-    } catch (error) {
-      console.error("Realtime aboneliği kurulurken hata oluştu:", error);
-      return null;
-    }
-  }, []);
-
+  // Sayfalar arası geçişlerde otomatik veri yenileme için
   useEffect(() => {
-    const userId = contextUser?.id;
-
-    if (!userId) return;
-    
-    const channel = createRealtimeChannel(userId);
-    
-    // Temizlik fonksiyonu
-    return () => {
-      if (channel) {
-        channel.unsubscribe();
-        console.log(`Realtime kanal aboneliği sonlandırıldı (Kullanıcı: ${userId})`);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && contextUser?.id) {
+        console.log('Sayfa görünür oldu, veriler yenileniyor...');
+        fetchInitialData(contextUser.id);
       }
     };
-  }, [contextUser?.id, createRealtimeChannel]);
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Cleanup
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [contextUser, fetchInitialData]);
 
   // --- Dinamik Kalan Süre Hesaplama için useEffect ---
   useEffect(() => {
@@ -236,7 +193,7 @@ export default function GameFiPage() {
 
   // --- YENİ: Hazırla ve Toplu Başlat Fonksiyonu ---
   const handlePrepareAndStart = async () => {
-    if (!currentUser || !currentUser.id) {
+    if (!contextUser || !contextUser.id) {
       toast.error('İşlemi başlatmak için kullanıcı bilgisi gerekli.');
       return;
     }
@@ -246,7 +203,7 @@ export default function GameFiPage() {
     const toastId = toast.loading('Uygun araçlar hazırlanıyor ve mining başlatılıyor...');
 
     try {
-      const result = await miningService.prepareAndStartEligibleCars(currentUser.id, autoPayMaintenance);
+      const result = await miningService.prepareAndStartEligibleCars(contextUser.id, autoPayMaintenance);
       setPrepareResult(result); // Dönen sonucu state'e kaydet
 
       if (result && result.error) {
@@ -256,14 +213,16 @@ export default function GameFiPage() {
       if (result && result.started_count > 0) {
         toast.success(`${result.started_count} araç başarıyla mininge gönderildi!`, { id: toastId });
         // Verileri yenile
-        fetchInitialData(currentUser.id);
+        await refreshUserData(); // Önce kullanıcı verisini yenile
+        fetchInitialData(contextUser.id);
       } else if (result) {
          // Hiç araç başlamadıysa bile mesaj gösterilebilir
          toast.success(`İşlem tamamlandı, ancak mininge gönderilecek uygun araç bulunamadı. ${result.warnings?.join(' ') || ''}`, { id: toastId, duration: 5000 });
           // Yine de verileri yenile (belki bakım yapılmıştır)
-          fetchInitialData(currentUser.id);
+          await refreshUserData(); // Önce kullanıcı verisini yenile
+          fetchInitialData(contextUser.id);
       } else {
-         // RPC null döndürdüyse
+          // RPC null döndürdüyse
           throw new Error('Araç hazırlama ve başlatma işlemi başarısız oldu (API yanıtı yok).');
       }
       
@@ -321,24 +280,24 @@ export default function GameFiPage() {
 
   return (
     <div className="pb-20 px-4">
-      {/* Kullanıcı kartı */}
+      {/* Kullanıcı kartı - Context verilerini doğrudan kullanıyor */}
       <div className="bg-[#1a1a2e]/70 p-4 rounded-xl mb-5 shadow-md border border-[#2a3855]/50">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 bg-[#16213e] rounded-full flex items-center justify-center">
             <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#2ff7c1] to-[#7b2ff7]">
-              {currentUser?.username?.charAt(0) || telegramUser?.first_name?.charAt(0) || '?'}
+              {contextUser?.username?.charAt(0) || telegramUser?.first_name?.charAt(0) || '?'}
             </span>
           </div>
           
           <div>
-            <h2 className="text-xl font-bold text-white">{currentUser?.username || telegramUser?.first_name || 'Oyuncu'}</h2>
+            <h2 className="text-xl font-bold text-white">{contextUser?.username || telegramUser?.first_name || 'Oyuncu'}</h2>
             <div className="flex items-center gap-1 text-sm text-gray-400">
-              <span>Seviye {currentUser?.level || 1}</span>
+              <span>Seviye {contextUser?.level || 1}</span>
               <span className="text-xs mx-1">•</span>
-              <span>XP: {formatNumber(currentUser?.xp || 0)}</span>
+              <span>XP: {formatNumber(contextUser?.xp || 0)}</span>
             </div>
             <div className="mt-1">
-              <span className="text-[#2ff7c1] font-medium">{formatCurrency(currentUser?.balance || 0)} NMFP</span>
+              <span className="text-[#2ff7c1] font-medium">{formatCurrency(contextUser?.balance || 0)} NMFP</span>
             </div>
           </div>
         </div>

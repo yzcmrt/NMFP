@@ -26,6 +26,7 @@ interface TelegramContextType {
   error: string | null;
   rawInitData: string | null;
   parsedInitData: TelegramInitData | null;
+  refreshUserData: () => Promise<void>;
 }
 
 // Telegram kullanıcı tipi (WebAppUser)
@@ -72,6 +73,7 @@ const TelegramContext = createContext<TelegramContextType>({
   error: null,
   rawInitData: null,
   parsedInitData: null,
+  refreshUserData: async () => {},
 });
 
 // Hook
@@ -88,6 +90,22 @@ export default function TelegramInitProvider({
   const [error, setError] = useState<string | null>(null);
   const [rawInitData, setRawInitData] = useState<string | null>(null);
   const [parsedInitData, setParsedInitData] = useState<TelegramInitData | null>(null);
+
+  // Kullanıcı verisini yenileme fonksiyonu
+  const refreshUserData = async () => {
+    if (!user?.id) return;
+    
+    try {
+      console.log('[TelegramInitProvider] Kullanıcı verisi yenileniyor:', user.id);
+      const updatedUser = await userService.getUserById(user.id);
+      if (updatedUser) {
+        console.log('[TelegramInitProvider] Kullanıcı verisi güncellendi:', updatedUser);
+        setUser(updatedUser);
+      }
+    } catch (error) {
+      console.error('[TelegramInitProvider] Kullanıcı verisi yenilenirken hata:', error);
+    }
+  };
 
   useEffect(() => {
     // Telegram WebApp API'sini yükle
@@ -111,6 +129,64 @@ export default function TelegramInitProvider({
       }
     };
   }, []);
+
+  // Realtime aboneliği için useEffect
+  useEffect(() => {
+    if (!user?.id) return;
+
+    // Realtime kanal oluştur
+    const channel = supabase
+      .channel(`users:${user.id}`)
+      .on('postgres_changes', 
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'users', 
+          filter: `id=eq.${user.id}` 
+        }, 
+        (payload) => {
+          console.log('[TelegramInitProvider] Kullanıcı verisi değişti:', payload);
+          
+          // Yeni kullanıcı verisini state'e aktar
+          if (payload.new) {
+            // Tip güvenliği için tüm alanları açıkça belirt
+            const updatedUser: User = {
+              id: payload.new.id,
+              telegram_id: payload.new.telegram_id,
+              username: payload.new.username,
+              wallet_address: payload.new.wallet_address,
+              balance: payload.new.balance || 0,
+              ton_coins: payload.new.ton_coins || '0',
+              xp: payload.new.xp || 0,
+              is_premium: Boolean(payload.new.is_premium),
+              level: payload.new.level || 1,
+              last_bonus_collected_at: payload.new.last_bonus_collected_at,
+              first_login_at: payload.new.first_login_at,
+              last_login: payload.new.last_login,
+              created_at: payload.new.created_at,
+              selected_car_id: payload.new.selected_car_id,
+              selected_garage_id: payload.new.selected_garage_id
+            };
+            
+            setUser(updatedUser);
+            toast.success('Kullanıcı bilgileri güncellendi!');
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`[TelegramInitProvider] Realtime aboneliği başarılı: users:${user.id}`);
+        } else {
+          console.error(`[TelegramInitProvider] Realtime aboneliği hatası:`, status, err);
+        }
+      });
+
+    // Cleanup
+    return () => {
+      channel.unsubscribe();
+      console.log(`[TelegramInitProvider] Realtime aboneliği sonlandırıldı: users:${user.id}`);
+    };
+  }, [user?.id]); // Sadece user.id değiştiğinde çalışsın
 
   const initTelegramApp = async () => {
     try {
@@ -455,7 +531,8 @@ export default function TelegramInitProvider({
       isLoading, 
       error,
       rawInitData,
-      parsedInitData
+      parsedInitData,
+      refreshUserData
     }}>
       {children}
     </TelegramContext.Provider>
