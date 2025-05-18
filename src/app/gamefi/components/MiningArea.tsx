@@ -27,13 +27,13 @@ export default function MiningArea() {
   const { user, refreshUserData } = useTelegram();
   const [userCars, setUserCars] = useState<UserCar[]>([]);
   const [userGarages, setUserGarages] = useState<Garage[]>([]);
-  const [activeMiningSession, setActiveMiningSession] = useState<MiningSession | null>(null);
+  const [activeMiningSessions, setActiveMiningSessions] = useState<MiningSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isClaimLoading, setIsClaimLoading] = useState(false);
+  const [isClaimLoading, setIsClaimLoading] = useState<{[key: number]: boolean}>({});
   const [error, setError] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState('00:00:00');
-  const [progress, setProgress] = useState(0);
-  const [timerRef, setTimerRef] = useState<NodeJS.Timeout | null>(null);
+  const [timeLeft, setTimeLeft] = useState<{[key: number]: string}>({});
+  const [progress, setProgress] = useState<{[key: number]: number}>({});
+  const [timerRefs, setTimerRefs] = useState<{[key: number]: NodeJS.Timeout | null}>({});
   const [totalMaintenanceCost, setTotalMaintenanceCost] = useState(0);
   const [totalFuelCost, setTotalFuelCost] = useState(0);
   const [totalEstimatedReward, setTotalEstimatedReward] = useState(0);
@@ -52,7 +52,7 @@ export default function MiningArea() {
       // Her API çağrısını ayrı try-catch bloklarında yaparak hataya dayanıklı hale getiriyoruz
       let carsData: UserCar[] = [];
       let garagesData: Garage[] = [];
-      let activeSessionData: MiningSession | null = null;
+      let activeSessionsData: MiningSession[] = [];
       
       try {
         carsData = await userCarService.getUserCars(user.id);
@@ -69,10 +69,9 @@ export default function MiningArea() {
       }
       
       try {
-        // getActiveMiningSession yerine getAllActiveMiningSessions kullanıyoruz ve ilk öğeyi alıyoruz
-        const activeSessions = await miningService.getAllActiveMiningSessions(user.id);
-        activeSessionData = activeSessions.length > 0 ? activeSessions[0] : null;
-        console.log('[MiningArea] Aktif mining oturumu:', activeSessionData);
+        // Tüm aktif mining oturumlarını al
+        activeSessionsData = await miningService.getAllActiveMiningSessions(user.id);
+        console.log('[MiningArea] Aktif mining oturumları:', activeSessionsData);
       } catch (sessionError) {
         console.error('[MiningArea] Mining oturumu çekerken hata:', sessionError);
       }
@@ -82,11 +81,11 @@ export default function MiningArea() {
       
       setUserCars(carsData || []);
       setUserGarages(garagesData || []);
-      setActiveMiningSession(activeSessionData);
+      setActiveMiningSessions(activeSessionsData || []);
       
       // Garaj kapasitesi hesapla
       const totalCapacity = (garagesData || []).reduce((total, garage) => total + garage.capacity, 0);
-      const usedSlots = carsData?.filter(car => car.status === CarStatus.MINING).length || 0;
+      const usedSlots = activeSessionsData?.length || 0;
       setAvailableGarageSlots(totalCapacity - usedSlots);
       
       // Mining gücünü ve kazancı hesapla
@@ -95,13 +94,8 @@ export default function MiningArea() {
       // Bakım ve yakıt maliyetlerini hesapla
       calculateTotalCosts(carsData || []);
       
-      // Aktif mining oturumu varsa zamanlayıcıyı kur
-      if (activeSessionData) {
-        setupMiningTimer(
-          new Date(activeSessionData.end_time), 
-          new Date(activeSessionData.start_time)
-        );
-      }
+      // Aktif mining oturumları için zamanlayıcıları kur
+      setupAllTimers(activeSessionsData || []);
     } catch (err: any) {
       console.error('[MiningArea] Veri getirme hatası:', err);
       setError('Veriler yüklenirken bir hata oluştu: ' + err.message);
@@ -130,50 +124,106 @@ export default function MiningArea() {
   useEffect(() => {
     fetchData();
     
-    // Component unmount olduğunda zamanlayıcıyı temizle
+    // Component unmount olduğunda zamanlayıcıları temizle
     return () => {
-      if (timerRef) {
-        clearInterval(timerRef);
-      }
+      Object.values(timerRefs).forEach(timer => {
+        if (timer) clearInterval(timer);
+      });
     };
-  }, [fetchData, timerRef]);
+  }, [fetchData]);
   
-  // Mining zamanlayıcısını kur
-  const setupMiningTimer = useCallback((endTime: Date, startTime: Date) => {
-    // Eğer daha önce bir zamanlayıcı kurulmuşsa temizle
-    if (timerRef) {
-      clearInterval(timerRef);
-    }
+  // Tüm zamanlayıcıları temizle
+  const clearAllTimers = useCallback(() => {
+    Object.entries(timerRefs).forEach(([sessionId, timer]) => {
+      if (timer) {
+        clearInterval(timer);
+      }
+    });
+    setTimerRefs({});
+  }, [timerRefs]);
+  
+  // Tüm zamanlayıcıları kur
+  const setupAllTimers = useCallback((sessions: MiningSession[]) => {
+    // Önce eski timerlari temizle
+    clearAllTimers();
     
-    const timer = setupTimer(
-      endTime,
-      (formattedTimeLeft, progressValue) => {
-        setTimeLeft(formattedTimeLeft);
-        setProgress(progressValue);
-      },
-      async () => {
-        // Mining tamamlandı, durumu güncelle
-        if (activeMiningSession) {
-          await completeMiningSession(activeMiningSession.id);
+    // Her session için yeni timer kur
+    const newTimerRefs: {[key: number]: NodeJS.Timeout | null} = {};
+    const newTimeLeft: {[key: number]: string} = {};
+    const newProgress: {[key: number]: number} = {};
+    
+    sessions.forEach(session => {
+      if (session.status === MiningStatus.ACTIVE) {
+        const timer = setupTimer(
+          new Date(session.end_time),
+          (formattedTimeLeft, progressValue) => {
+            setTimeLeft(prev => ({...prev, [session.id]: formattedTimeLeft}));
+            setProgress(prev => ({...prev, [session.id]: progressValue}));
+          },
+          async () => {
+            // Mining tamamlandı, oturumu güncelle
+            await completeMiningSession(session.id);
+          },
+          new Date(session.start_time)
+        );
+        
+        newTimerRefs[session.id] = timer;
+        
+        // İlk değerleri hesapla
+        const now = new Date();
+        const endTime = new Date(session.end_time);
+        const startTime = new Date(session.start_time);
+        
+        if (now >= endTime) {
+          newTimeLeft[session.id] = '00:00:00';
+          newProgress[session.id] = 100;
+        } else {
+          const totalDuration = endTime.getTime() - startTime.getTime();
+          const elapsed = now.getTime() - startTime.getTime();
+          const progressValue = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
+          
+          newTimeLeft[session.id] = formatTimeLeft(endTime.getTime() - now.getTime());
+          newProgress[session.id] = progressValue;
         }
-      },
-      startTime
-    );
+      }
+    });
     
-    setTimerRef(timer);
-  }, [activeMiningSession, timerRef]);
+    setTimerRefs(newTimerRefs);
+    setTimeLeft(newTimeLeft);
+    setProgress(newProgress);
+  }, [clearAllTimers]);
   
   // Mining oturumunu tamamla
   const completeMiningSession = async (sessionId: number) => {
     if (!user?.id) return;
     
     try {
-      setIsClaimLoading(true);
-      // miningService.completeMining fonksiyonunu kullanıyoruz
+      setIsClaimLoading(prev => ({...prev, [sessionId]: true}));
+      
+      // Zamanlayıcıyı temizle
+      if (timerRefs[sessionId]) {
+        clearInterval(timerRefs[sessionId]!);
+        setTimerRefs(prev => {
+          const newTimerRefs = {...prev};
+          delete newTimerRefs[sessionId];
+          return newTimerRefs;
+        });
+      }
+      
+      // Mining tamamla
       const reward = await miningService.completeMining(sessionId);
       
       if (reward > 0) {
-        setActiveMiningSession(null);
+        // Oturumu tamamlanmış olarak işaretle
+        setActiveMiningSessions(prev => {
+          return prev.map(session => {
+            if (session.id === sessionId) {
+              return {...session, status: MiningStatus.COMPLETED};
+            }
+            return session;
+          });
+        });
+        
         toast.success(`Mining tamamlandı! ${formatNumber(reward)} NMFP kazandınız.`);
         
         // Araçları güncelle (yakıt ve durumları değişmiş olacak)
@@ -186,12 +236,15 @@ export default function MiningArea() {
         
         // Kullanıcı bakiyesini de güncelle
         await refreshUserData();
+        
+        // Tüm verileri yenile
+        await fetchData();
       }
     } catch (err) {
       console.error('[MiningArea] Mining tamamlama hatası:', err);
       toast.error('Mining tamamlanırken bir hata oluştu.');
     } finally {
-      setIsClaimLoading(false);
+      setIsClaimLoading(prev => ({...prev, [sessionId]: false}));
     }
   };
   
@@ -259,25 +312,33 @@ export default function MiningArea() {
     }
   };
   
-  // Mining başlat
-  const startMining = async () => {
+  // Araç için mining başlat
+  const startMining = async (carId: number) => {
     if (!user || !user.id) {
       toast.error('Kullanıcı bilgisi bulunamadı');
       return;
     }
     
-    if (activeMiningSession) {
-      toast.error('Zaten aktif bir mining oturumu var!');
+    // Seçilen aracı bul
+    const selectedCar = userCars.find(car => car.id === carId);
+    if (!selectedCar) {
+      toast.error('Seçilen araç bulunamadı!');
       return;
     }
     
-    // Mining yapılabilecek araçları bul (bakım ve yakıtı yeterli olanlar)
-    const miningReadyCars = userCars.filter(
-      car => car.status === CarStatus.ACTIVE && car.fuel >= 25 && car.condition >= 10
-    );
+    // Araç kontrolleri
+    if (selectedCar.status !== CarStatus.ACTIVE) {
+      toast.error('Bu araç mining için uygun değil!');
+      return;
+    }
     
-    if (miningReadyCars.length === 0) {
-      toast.error('Mining yapabilecek uygun araç yok! Araçlarınızı tamir edin ve yakıt doldurun.');
+    if (selectedCar.fuel < 25) {
+      toast.error('Yeterli yakıt yok! En az %25 yakıt gerekiyor.');
+      return;
+    }
+    
+    if (selectedCar.condition < 10) {
+      toast.error('Yeterli araç kondisyonu yok! En az %10 kondisyon gerekiyor.');
       return;
     }
     
@@ -287,15 +348,8 @@ export default function MiningArea() {
       return;
     }
     
-    // En güçlü araçları al (garaj kapasitesi kadar)
-    const sortedCars = [...miningReadyCars].sort((a, b) => {
-      const powerA = a.car_model?.mining_power || 0;
-      const powerB = b.car_model?.mining_power || 0;
-      return powerB - powerA;
-    });
-    
-    const selectedCar = sortedCars[0]; // En güçlü aracı seç
-    const selectedGarage = userGarages.length > 0 ? userGarages[0].id : null; // İlk garajı kullan
+    // Garaj seç (basit olarak ilk garajı kullan)
+    const selectedGarage = userGarages.length > 0 ? userGarages[0].id : null;
     
     setIsLoading(true);
     const toastId = toast.loading('Mining başlatılıyor...');
@@ -311,32 +365,8 @@ export default function MiningArea() {
       if (newSessionId) {
         toast.success('Mining başarıyla başlatıldı!', { id: toastId });
         
-        // Mining oturumları ve araçları güncelle
-        const [activeSessions, updatedCars] = await Promise.all([
-          miningService.getAllActiveMiningSessions(user.id),
-          userCarService.getUserCars(user.id)
-        ]);
-        
-        const newSession = activeSessions.length > 0 ? activeSessions[0] : null;
-        
-        if (newSession) {
-          setActiveMiningSession(newSession);
-          setupMiningTimer(
-            new Date(newSession.end_time),
-            new Date(newSession.start_time)
-          );
-        }
-        
-        if (updatedCars) {
-          setUserCars(updatedCars);
-          // Araç durumları değiştiği için maliyet ve slot hesaplamalarını güncelle
-          calculateTotalCosts(updatedCars);
-          const usedSlots = updatedCars.filter(car => car.status === CarStatus.MINING).length;
-          setAvailableGarageSlots(userGarages.reduce((total, garage) => total + garage.capacity, 0) - usedSlots);
-        }
-        
-        // Kullanıcı bakiyesini güncelle
-        await refreshUserData();
+        // Tüm verileri yenile
+        await fetchData();
       } else {
         toast.error('Mining başlatılamadı.', { id: toastId });
       }
@@ -385,18 +415,29 @@ export default function MiningArea() {
   };
   
   // Mining durumu stil sınıfları
-  const miningClasses = getMiningStatusClasses(
-    activeMiningSession 
-      ? activeMiningSession.status === MiningStatus.COMPLETED 
-        ? 'completed' 
-        : 'mining'
-      : 'idle'
-  );
+  const getMiningClassesForStatus = (status: 'idle' | 'mining' | 'completed') => {
+    return getMiningStatusClasses(status);
+  };
+
+  // Araç mining'de mi kontrol et
+  const isCarMining = (carId: number) => {
+    return activeMiningSessions.some(session => 
+      session.car_id === carId && 
+      session.status === MiningStatus.ACTIVE
+    );
+  };
+
+  // Araç için mining oturumunu bul
+  const getMiningSessionForCar = (carId: number) => {
+    return activeMiningSessions.find(session => 
+      session.car_id === carId
+    );
+  };
 
   return (
     <div className="space-y-4">
       {/* Bakım ve Yakıt Özeti */}
-      <div className={`${miningClasses.bg} rounded-xl p-4 shadow-md border ${miningClasses.border}`}>
+      <div className="bg-[#1a1a2e]/70 rounded-xl p-4 shadow-md border border-[#2a3855]/50">
         <div className="flex justify-between items-center mb-3">
           <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#7b2ff7]">
             Araç Durumu ve Bakım
@@ -429,8 +470,112 @@ export default function MiningArea() {
         )}
       </div>
       
+      {/* Garaj Kapasitesi */}
+      <div className="bg-[#1a1a2e]/70 rounded-xl p-4 shadow-md border border-[#2a3855]/50">
+        <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#7b2ff7] mb-3">
+          Garaj Kapasitesi
+        </h3>
+        
+        <div className="bg-[#16213e]/70 p-4 rounded-lg">
+          <div className="flex justify-between text-xs text-gray-400 mb-2">
+            <span>Toplam Garaj Kapasitesi:</span>
+            <span>{userGarages.reduce((total, garage) => total + garage.capacity, 0)}</span>
+          </div>
+          <div className="flex justify-between text-xs text-gray-400 mb-2">
+            <span>Kullanılan Slot:</span>
+            <span>{activeMiningSessions.filter(s => s.status === MiningStatus.ACTIVE).length}</span>
+          </div>
+          <div className="flex justify-between font-medium">
+            <span>Kullanılabilir Slot:</span>
+            <span className="text-[#2ff7c1]">{availableGarageSlots}</span>
+          </div>
+        </div>
+      </div>
+      
+      {/* Aktif Mining Oturumları */}
+      {activeMiningSessions.length > 0 && (
+        <div className="bg-[#1a1a2e]/70 rounded-xl p-4 shadow-md border border-[#2a3855]/50">
+          <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#7b2ff7] mb-3">
+            Aktif Mining İşlemleri
+          </h3>
+          
+          <div className="space-y-3">
+            {activeMiningSessions.map(session => {
+              const sessionCar = userCars.find(car => car.id === session.car_id);
+              const miningClasses = getMiningClassesForStatus(
+                session.status === MiningStatus.COMPLETED ? 'completed' : 'mining'
+              );
+              
+              return (
+                <div key={session.id} className={`${miningClasses.bg} rounded-lg p-3 border ${miningClasses.border}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 bg-[#1a1a2e] rounded-md flex items-center justify-center">
+                        <span className="text-lg font-bold">{sessionCar?.name?.substring(0, 1) || '?'}</span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-white">{sessionCar?.name || `Araç #${session.car_id}`}</p>
+                        <div className="flex items-center text-xs">
+                          <span className="text-[#2ff7c1]">
+                            {session.status === MiningStatus.COMPLETED ? 'Tamamlandı' : 'Mining Yapıyor'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-400">Ödül:</p>
+                      <p className="text-lg font-bold text-[#2ff7c1]">
+                        {formatCurrency(session.expected_reward)} NMFP
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {session.status === MiningStatus.ACTIVE && (
+                    <>
+                      <div className="flex justify-between text-sm mb-2">
+                        <div className="flex items-center">
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-[#2ff7c1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span>Kalan Süre</span>
+                        </div>
+                        <span className="font-mono text-[#2ff7c1]">{timeLeft[session.id] || '--:--:--'}</span>
+                      </div>
+                      
+                      <div className="w-full h-3 bg-[#1a1a2e] rounded-full overflow-hidden mb-3">
+                        <div 
+                          className={`h-full bg-gradient-to-r ${miningClasses.progress}`}
+                          style={{ width: `${progress[session.id] || 0}%` }}
+                        ></div>
+                      </div>
+                    </>
+                  )}
+                  
+                  {session.status === MiningStatus.COMPLETED ? (
+                    <button
+                      onClick={() => completeMiningSession(session.id)}
+                      disabled={isClaimLoading[session.id]}
+                      className="w-full bg-gradient-to-r from-[#2ff7c1] to-[#5ff7d5] text-[#0d253f] py-2 px-4 rounded-lg font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#2ff7c1]/30 disabled:opacity-50"
+                    >
+                      {isClaimLoading[session.id] ? 'İşleniyor...' : 'Ödülü Topla'}
+                    </button>
+                  ) : (
+                    <button
+                      disabled
+                      className="w-full bg-[#1a1a2e] text-gray-400 py-2 px-4 rounded-lg font-medium cursor-not-allowed"
+                    >
+                      Mining Devam Ediyor
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      
       {/* Araç Listesi */}
-      <div className={`${miningClasses.bg} rounded-xl p-4 shadow-md border ${miningClasses.border}`}>
+      <div className="bg-[#1a1a2e]/70 rounded-xl p-4 shadow-md border border-[#2a3855]/50">
         <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#7b2ff7] mb-3">
           Araçlarım
         </h3>
@@ -441,188 +586,129 @@ export default function MiningArea() {
           </div>
         ) : (
           <div className="space-y-2">
-            {userCars.map(car => (
-              <div key={car.id} className={`bg-[#16213e]/70 p-3 rounded-lg ${car.status === CarStatus.MINING ? 'border border-[#2ff7c1]/30' : ''}`}>
-                <div className="flex justify-between items-center" onClick={() => toggleCarDetails(car.id)}>
-                  <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 bg-[#1a1a2e] rounded-md flex items-center justify-center">
-                      <span className="text-lg font-bold">{car.name.substring(0, 1)}</span>
-                    </div>
-                    <div>
-                      <p className="font-medium text-white">{car.name}</p>
-                      <div className="flex items-center text-xs">
-                        <span className={car.status === CarStatus.MINING ? 'text-[#2ff7c1]' : 'text-gray-400'}>
-                          {car.status === CarStatus.MINING ? 'Mining Yapıyor' : 'Hazır'}
-                        </span>
+            {userCars.map(car => {
+              const isMining = isCarMining(car.id);
+              const miningSession = getMiningSessionForCar(car.id);
+              
+              return (
+                <div key={car.id} className={`bg-[#16213e]/70 p-3 rounded-lg ${isMining ? 'border border-[#2ff7c1]/30' : ''}`}>
+                  <div className="flex justify-between items-center" onClick={() => toggleCarDetails(car.id)}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-10 h-10 bg-[#1a1a2e] rounded-md flex items-center justify-center">
+                        <span className="text-lg font-bold">{car.name.substring(0, 1)}</span>
                       </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <div className="flex items-center gap-1">
-                        <div className="w-1.5 h-6 bg-gradient-to-b from-orange-400 to-orange-600 rounded-full overflow-hidden">
-                          <div 
-                            className="w-full bg-[#16213e]/70" 
-                            style={{ height: `${100 - car.condition}%` }}
-                          ></div>
-                        </div>
-                        <div className="w-1.5 h-6 bg-gradient-to-b from-blue-400 to-blue-600 rounded-full overflow-hidden">
-                          <div 
-                            className="w-full bg-[#16213e]/70" 
-                            style={{ height: `${100 - car.fuel}%` }}
-                          ></div>
+                      <div>
+                        <p className="font-medium text-white">{car.name}</p>
+                        <div className="flex items-center text-xs">
+                          <span className={car.status === CarStatus.MINING ? 'text-[#2ff7c1]' : 'text-gray-400'}>
+                            {car.status === CarStatus.MINING ? 'Mining Yapıyor' : 'Hazır'}
+                          </span>
                         </div>
                       </div>
                     </div>
-                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 text-gray-400 transition-transform ${expandedCar === car.id ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-6 bg-gradient-to-b from-orange-400 to-orange-600 rounded-full overflow-hidden">
+                            <div 
+                              className="w-full bg-[#16213e]/70" 
+                              style={{ height: `${100 - car.condition}%` }}
+                            ></div>
+                          </div>
+                          <div className="w-1.5 h-6 bg-gradient-to-b from-blue-400 to-blue-600 rounded-full overflow-hidden">
+                            <div 
+                              className="w-full bg-[#16213e]/70" 
+                              style={{ height: `${100 - car.fuel}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                      <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 text-gray-400 transition-transform ${expandedCar === car.id ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
                   </div>
+                  
+                  {expandedCar === car.id && (
+                    <div className="mt-3 pt-3 border-t border-[#2a3855]/50">
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <div>
+                          <p className="text-xs text-gray-400">Bakım Durumu</p>
+                          <div className="flex justify-between items-center">
+                            <p className="text-sm font-medium text-orange-400">%{car.condition}</p>
+                            <p className="text-xs text-gray-400">
+                              {formatCurrency(calculateMaintenanceCost(car.condition, 10))} NMFP
+                            </p>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-400">Yakıt Durumu</p>
+                          <div className="flex justify-between items-center">
+                            <p className="text-sm font-medium text-blue-400">%{car.fuel}</p>
+                            <p className="text-xs text-gray-400">
+                              {formatCurrency(calculateFuelCost(car.fuel, 5))} NMFP
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center mb-3">
+                        <div>
+                          <p className="text-xs text-gray-400">Mining Gücü</p>
+                          <p className="text-sm font-medium text-[#2ff7c1]">{formatNumber(car.car_model?.mining_power || 0)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-400">8 Saatlik Kazanç</p>
+                          <p className="text-sm font-medium text-[#7b2ff7]">
+                            {formatCurrency(calculateMiningReward(car.car_model?.mining_power || 0, 8))} NMFP
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {/* Mining başlat butonu (eğer araç hazırsa) */}
+                      {car.status === CarStatus.ACTIVE && (
+                        <button
+                          onClick={() => startMining(car.id)}
+                          disabled={isLoading || availableGarageSlots <= 0 || car.fuel < 25 || car.condition < 10}
+                          className="w-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7] text-white py-2 px-4 rounded-lg font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30 disabled:opacity-50"
+                        >
+                          {isLoading ? 'İşleniyor...' : 'Mining Başlat'}
+                        </button>
+                      )}
+                      
+                      {/* Mining durumu (eğer mining yapıyorsa) */}
+                      {car.status === CarStatus.MINING && miningSession && (
+                        <div className="text-xs text-center text-[#2ff7c1]">
+                          Bu araç şu anda mining yapıyor. 
+                          Detaylar yukarıdaki Aktif Mining İşlemleri bölümünde.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                
-                {expandedCar === car.id && (
-                  <div className="mt-3 pt-3 border-t border-[#2a3855]/50">
-                    <div className="grid grid-cols-2 gap-2 mb-3">
-                      <div>
-                        <p className="text-xs text-gray-400">Bakım Durumu</p>
-                        <div className="flex justify-between items-center">
-                          <p className="text-sm font-medium text-orange-400">%{car.condition}</p>
-                          <p className="text-xs text-gray-400">
-                            {formatCurrency(calculateMaintenanceCost(car.condition, 10))} NMFP
-                          </p>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-400">Yakıt Durumu</p>
-                        <div className="flex justify-between items-center">
-                          <p className="text-sm font-medium text-blue-400">%{car.fuel}</p>
-                          <p className="text-xs text-gray-400">
-                            {formatCurrency(calculateFuelCost(car.fuel, 5))} NMFP
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="text-xs text-gray-400">Mining Gücü</p>
-                        <p className="text-sm font-medium text-[#2ff7c1]">{formatNumber(car.car_model?.mining_power || 0)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-400">8 Saatlik Kazanç</p>
-                        <p className="text-sm font-medium text-[#7b2ff7]">
-                          {formatCurrency(calculateMiningReward(car.car_model?.mining_power || 0, 8))} NMFP
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
       
-      {/* Mining Alanı */}
-      <div className={`${miningClasses.bg} rounded-xl p-4 shadow-md border ${miningClasses.border}`}>
+      {/* Toplam Mining Gücü */}
+      <div className="bg-[#1a1a2e]/70 rounded-xl p-4 shadow-md border border-[#2a3855]/50">
         <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#7b2ff7] mb-3">
-          Mining İşlemi
+          Mining Gücü
         </h3>
         
-        {!activeMiningSession ? (
-          <div>
-            <div className="bg-[#16213e]/70 p-4 rounded-lg mb-4">
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Toplam Mining Gücü</p>
-                  <p className="text-xl font-bold text-[#2ff7c1]">{formatNumber(totalMiningPower)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">8 Saatlik Tahmin</p>
-                  <p className="text-xl font-bold text-[#7b2ff7]">{formatCurrency(totalEstimatedReward)}</p>
-                </div>
-              </div>
-              
-              <div className="flex justify-between text-xs text-gray-400 mb-1">
-                <span>Garaj Kapasitesi:</span>
-                <span>{userGarages.reduce((total, garage) => total + garage.capacity, 0)}</span>
-              </div>
-              <div className="flex justify-between text-xs text-gray-400 mb-3">
-                <span>Kullanılabilir Slot:</span>
-                <span>{availableGarageSlots}</span>
-              </div>
+        <div className="bg-[#16213e]/70 p-4 rounded-lg">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs text-gray-400 mb-1">Toplam Mining Gücü</p>
+              <p className="text-xl font-bold text-[#2ff7c1]">{formatNumber(totalMiningPower)}</p>
             </div>
-            
-            <button
-              onClick={startMining}
-              disabled={isLoading || availableGarageSlots <= 0}
-              className="w-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7] text-white py-3 px-4 rounded-lg font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30 disabled:opacity-50"
-            >
-              {isLoading ? 'İşleniyor...' : 'Mining Başlat'}
-            </button>
-          </div>
-        ) : (
-          <div>
-            <div className="bg-[#16213e]/70 p-4 rounded-lg mb-4">
-              {activeMiningSession.status === MiningStatus.ACTIVE ? (
-                <>
-                  <div className="flex justify-between text-sm mb-2">
-                    <div className="flex items-center">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-[#2ff7c1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>Kalan Süre</span>
-                    </div>
-                    <span className="font-mono text-[#2ff7c1]">{timeLeft}</span>
-                  </div>
-                  
-                  <div className="w-full h-3 bg-[#1a1a2e] rounded-full overflow-hidden mb-3">
-                    <div 
-                      className={`h-full bg-gradient-to-r ${miningClasses.progress}`}
-                      style={{ width: `${progress}%` }}
-                    ></div>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center mb-3">
-                  <p className="text-[#2ff7c1] font-medium">Mining Tamamlandı!</p>
-                  <p className="text-sm text-gray-400">Ödülünüzü toplayabilirsiniz.</p>
-                </div>
-              )}
-              
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Araç</p>
-                  <p className="text-sm font-medium">
-                    {userCars.find(car => car.id === activeMiningSession.car_id)?.name || 'Araç #1'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-400 mb-1">Ödül</p>
-                  <p className="text-lg font-bold text-[#2ff7c1]">
-                    {formatCurrency(activeMiningSession.expected_reward)} NMFP
-                  </p>
-                </div>
-              </div>
+            <div>
+              <p className="text-xs text-gray-400 mb-1">8 Saatlik Tahmin</p>
+              <p className="text-xl font-bold text-[#7b2ff7]">{formatCurrency(totalEstimatedReward)}</p>
             </div>
-            
-            {activeMiningSession.status === MiningStatus.COMPLETED ? (
-              <button
-                onClick={completeMiningSession}
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-[#2ff7c1] to-[#5ff7d5] text-[#0d253f] py-3 px-4 rounded-lg font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#2ff7c1]/30 disabled:opacity-50"
-              >
-                {isLoading ? 'İşleniyor...' : 'Ödülü Topla'}
-              </button>
-            ) : (
-              <button
-                disabled
-                className="w-full bg-[#1a1a2e] text-gray-400 py-3 px-4 rounded-lg font-medium cursor-not-allowed"
-              >
-                Mining Devam Ediyor
-              </button>
-            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

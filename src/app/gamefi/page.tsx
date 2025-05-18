@@ -210,31 +210,43 @@ export default function GameFiPage() {
          throw new Error(result.error); // SQL fonksiyonu içinden dönen hatayı fırlat
       }
        
-      if (result && result.started_count > 0) {
-        toast.success(`${result.started_count} araç başarıyla mininge gönderildi!`, { id: toastId });
-        // Verileri yenile
-        await refreshUserData(); // Önce kullanıcı verisini yenile
+      if (result && result.started_cars && result.started_cars > 0) {
+        toast.success(`${result.started_cars} adet araç mining için başlatıldı!`, { id: toastId });
+        
+        // Araç ve garaj listelerini güncelle
         fetchInitialData(contextUser.id);
-      } else if (result) {
-         // Hiç araç başlamadıysa bile mesaj gösterilebilir
-         toast.success(`İşlem tamamlandı, ancak mininge gönderilecek uygun araç bulunamadı. ${result.warnings?.join(' ') || ''}`, { id: toastId, duration: 5000 });
-          // Yine de verileri yenile (belki bakım yapılmıştır)
-          await refreshUserData(); // Önce kullanıcı verisini yenile
-          fetchInitialData(contextUser.id);
+        
+        // Kullanıcı bakiyesini güncelle (bakım için ödeme yapıldıysa)
+        refreshUserData();
+          
+        console.log('Mining toplu başlatma sonucu:', result);
+      } else if (result && result.started_cars === 0) {
+        // Araç başlatılamadı
+        toast.warn('Hiçbir araç mining için başlatılamadı. Yakıt/kondisyon durumu veya yeterli garaj kapasitesi olup olmadığını kontrol edin.', 
+          { id: toastId, duration: 5000 });
       } else {
-          // RPC null döndürdüyse
-          throw new Error('Araç hazırlama ve başlatma işlemi başarısız oldu (API yanıtı yok).');
+        // Diğer hata durumları
+        toast.error('Mining başlatma işlemi sırasında bir hata meydana geldi.', { id: toastId });
+      }
+    } catch (error: any) {
+      console.error('Hazırla ve başlat hatası:', error);
+      let errorMessage = 'Mining başlatma işlemi sırasında bir hata meydana geldi.';
+      
+      // Hata mesajını kontrol et, yetersiz bakiye gibi bilinen hataları özel mesajlarla göster
+      if (error.message) {
+        if (error.message.includes('yetersiz bakiye') || error.message.includes('insufficient balance')) {
+          errorMessage = 'Bakım için yetersiz bakiye. Lütfen daha sonra tekrar deneyin veya bakım ödeme seçeneğini kapatın.';
+        } else if (error.message.includes('uygun araç yok') || error.message.includes('no eligible cars')) {
+          errorMessage = 'Mining için uygun durumda araç bulunamadı. Araçlarınızın durumunu kontrol edin.';
+        } else if (error.message.includes('garaj kapasitesi') || error.message.includes('garage capacity')) {
+          errorMessage = 'Yeterli garaj kapasitesi yok. Yeni garaj satın alın veya aktif mining işlemlerinizi tamamlayın.';
+        } else {
+          // Diğer hataları olduğu gibi göster
+          errorMessage = error.message;
+        }
       }
       
-      // Uyarıları ayrıca göster
-      if (result?.warnings && result.warnings.length > 0) {
-          result.warnings.forEach((warning: string) => toast.error(warning, { duration: 6000 }));
-      }
-
-    } catch (error: any) {
-      console.error('Hazırla ve başlatma hatası:', error);
-      toast.error(error.message || 'Araç hazırlama ve başlatma sırasında bir hata oluştu.', { id: toastId });
-      setPrepareResult({ error: error.message } as PrepareResult); // Hata mesajını sonuca ekle
+      toast.error(errorMessage, { id: toastId, duration: 5000 });
     } finally {
       setIsPreparingCars(false);
     }
