@@ -380,7 +380,7 @@ export const miningService = {
   },
   
   // YENİ: Kullanıcının TÜM aktif mining oturumlarını getir
-  getAllActiveMiningSessions: async (userId: string): Promise<MiningSession[]> => {
+  getAllActiveMiningSessions: async (userId: string): Promise<MiningSession[]> => { 
     try {
       console.log(`[getAllActiveMiningSessions] Kullanıcı ${userId} için aktif ve tamamlanmış mining oturumları getiriliyor...`);
       
@@ -414,37 +414,12 @@ export const miningService = {
     }
   },
 
-  // Mining başlat (TEK ARAÇ)
+  // Mining başlat (TEK ARAÇ) - SQL fonksiyonu kullanarak
   startMining: async (userId: string, carId: number, garageId?: number | null): Promise<number | null> => { // Yeni session ID'sini döndürür
     try {
         console.log(`[startMining] Başlatılıyor: userId=${userId}, carId=${carId}, garageId=${garageId}`);
         
-        // Önce aracın gerçekten bu kullanıcıya ait olduğunu ve active durumda olduğunu kontrol et
-        const { data: carCheck, error: carError } = await supabase
-            .from('user_cars')
-            .select('id, status')
-            .eq('id', carId)
-            .eq('user_id', userId)
-            .single();
-            
-        if (carError) {
-            console.error(`[startMining] Araç kontrol hatası:`, carError);
-            throw new ApiError(`Araç kontrolü sırasında hata: ${carError.message}`, 400);
-        }
-        
-        if (!carCheck) {
-            console.error(`[startMining] Araç bulunamadı veya bu kullanıcıya ait değil: carId=${carId}, userId=${userId}`);
-            throw new ApiError(`Bu araç size ait değil veya bulunamadı (ID: ${carId})`, 404);
-        }
-        
-        if (carCheck.status !== 'active') {
-            console.error(`[startMining] Araç mining için uygun durumda değil: status=${carCheck.status}`);
-            throw new ApiError(`Bu araç mining için uygun durumda değil (Durum: ${carCheck.status})`, 400);
-        }
-        
-        console.log(`[startMining] Araç kontrolü başarılı, RPC çağrılıyor`);
-        
-        // RPC çağrısı yap
+        // RPC çağrısı yaparak SQL fonksiyonunu çağır
         const { data, error } = await supabase.rpc('start_mining', {
            p_user_id: userId,
            p_car_id: carId,
@@ -496,7 +471,7 @@ export const miningService = {
     }
   },
 
-   // Mining tamamla (TEK OTURUM)
+   // Mining tamamla (TEK OTURUM) - SQL fonksiyonu kullanarak
   completeMining: async (sessionId: number): Promise<number> => { // Kazanılan ödül miktarını (BIGINT) döndürür
       try {
           const { data, error } = await supabase.rpc('complete_mining', {

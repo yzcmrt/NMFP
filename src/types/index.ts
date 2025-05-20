@@ -7,7 +7,8 @@ export enum CarStatus {
   ACTIVE = 'active',       // mining veya idle (kullanıma hazır)
   INACTIVE = 'inactive',   // Yeni alındı, garajda, vb.
   MINING = 'mining',       // Şu anda mining yapıyor
-  REPAIRING = 'repairing'    // Şu anda tamirde
+  REPAIRING = 'repairing',    // Şu anda tamirde
+  SOLD = 'sold'            // Satılmış araç
   // DB Şeması:
   // CREATE TYPE car_status AS ENUM ('active', 'mining', 'repairing'); -- Eski? 
   // Veya TEXT mi? Şimdilik TEXT varsayıyoruz.
