@@ -713,7 +713,7 @@ export default function CarPage() {
   // ----- RENDER ----- 
 
   return (
-    <div className="pb-12">
+    <div className="pb-20">
       {/* Sayfa Başlığı */}
       <div className="mobile-app-header relative mb-6">
         <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#7b2ff7] via-[#2f7bf7] to-[#2ff7c1] opacity-80"></div>
