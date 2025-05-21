@@ -503,7 +503,7 @@ export default function CarPage() {
       }
     });
     setTimerRefs({});
-  }, [timerRefs]);
+  }, []);
 
   // Mining oturumlarını ve zamanlayıcıları kur
   const setupMiningTimers = useCallback((sessions: MiningSession[]) => {
@@ -578,7 +578,7 @@ export default function CarPage() {
     
     // Temizlik yapıldı
     setShouldCleanup(false);
-  }, [setTimerRefs, setTimeLeft, setProgress, setLocalMiningSessions, shouldCleanup]);
+  }, [shouldCleanup]);
 
   // Temizlik için useEffect
   useEffect(() => {
@@ -628,7 +628,7 @@ export default function CarPage() {
     } catch (err) {
       console.error('[CarPage] Mining oturumları yüklenirken hata:', err);
     }
-  }, [user?.id, setupMiningTimers, lastUpdateTime, setActiveMiningSessions, setLastUpdateTime]);
+  }, [user?.id, setupMiningTimers, lastUpdateTime]);
 
   // Mining oturumlarını sayfa yüklendiğinde ve kullanıcı değiştiğinde getir
   useEffect(() => {
