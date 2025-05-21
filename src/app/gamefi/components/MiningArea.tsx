@@ -42,81 +42,42 @@ export default function MiningArea() {
   const [availableGarageSlots, setAvailableGarageSlots] = useState(0);
   const [expandedCar, setExpandedCar] = useState<number | null>(null);
 
-  // Verileri yeniden çek (mining durumlarını günceller)
-  const fetchData = useCallback(async () => {
-    if (!user?.id) return;
+  // Fonksiyonları önce tanımla
+  // Toplam mining gücünü hesapla
+  const calculateTotalMiningPower = useCallback((cars: UserCar[]) => {
+    let totalPower = 0;
+    let estimatedReward = 0;
     
-    try {
-      setIsLoading(true);
-      
-      // Süresi dolmuş mining oturumlarını güncelle (backend)
-      try {
-        await miningService.updateExpiredMiningSessions();
-      } catch (err) {
-        console.warn('Mining oturumları güncellenirken hata:', err);
-      }
-      
-      // Frontend verilerini güncelle
-      const [cars, garages, sessions] = await Promise.all([
-        userCarService.getUserCars(user.id),
-        garageService.getUserGarages(user.id),
-        miningService.getAllActiveMiningSessions(user.id)
-      ]);
-      
-      if (cars) {
-        setUserCars(cars);
-        calculateTotalMiningPower(cars);
-        calculateTotalCosts(cars);
-      }
-      
-      if (garages) {
-        setUserGarages(garages);
+    cars.forEach(car => {
+      if (car.status !== CarStatus.SOLD) {
+        const miningPower = car.car_model?.mining_power || 0;
+        totalPower += miningPower;
         
-        // Toplam ve kullanılabilir garaj alanı hesapla
-        const totalSlots = garages.reduce((total, garage) => total + garage.capacity, 0);
-        setAvailableGarageSlots(Math.max(0, totalSlots - sessions.filter(s => s.status === MiningStatus.ACTIVE).length));
+        // Tahmini 8 saatlik ödülü hesapla
+        const hourlyReward = calculateMiningReward(miningPower, 8);
+        estimatedReward += hourlyReward;
       }
-      
-      if (sessions) {
-        // Mining oturumlarını state'e kaydet
-        setActiveMiningSessions(sessions);
-        setupAllTimers(sessions);
-      }
-      
-    } catch (err) {
-      console.error('[MiningArea] fetchData Hatası:', err);
-      toast.error('Veriler yüklenirken bir hata oluştu.');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [user?.id, calculateTotalMiningPower, calculateTotalCosts, setupAllTimers]);
-
-  // Sayfa görünür olduğunda veri yenileme için
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && !isLoading) {
-        console.log('[MiningArea] Sayfa görünür oldu, veriler yenileniyor...');
-        fetchData();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    });
     
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [fetchData, isLoading]);
+    setTotalMiningPower(totalPower);
+    setTotalEstimatedReward(estimatedReward);
+  }, []);
   
-  useEffect(() => {
-    fetchData();
+  // Toplam bakım ve yakıt maliyetlerini hesapla
+  const calculateTotalCosts = useCallback((cars: UserCar[]) => {
+    let maintenance = 0;
+    let fuel = 0;
     
-    // Component unmount olduğunda zamanlayıcıları temizle
-    return () => {
-      Object.values(timerRefs).forEach(timer => {
-        if (timer) clearInterval(timer);
-      });
-    };
-  }, [fetchData]);
+    cars.forEach(car => {
+      if (car.status !== CarStatus.SOLD) {
+        maintenance += calculateMaintenanceCost(car.condition, 10); // 10 NMFP per % condition
+        fuel += calculateFuelCost(car.fuel, 5); // 5 NMFP per % fuel
+      }
+    });
+    
+    setTotalMaintenanceCost(maintenance);
+    setTotalFuelCost(fuel);
+  }, []);
   
   // Tüm zamanlayıcıları temizle
   const clearAllTimers = useCallback(() => {
@@ -191,6 +152,86 @@ export default function MiningArea() {
     setTimeLeft(newTimeLeft);
     setProgress(newProgress);
   }, [clearAllTimers]);
+
+  // Verileri yeniden çek (mining durumlarını günceller)
+  const fetchData = useCallback(async () => {
+    if (!user?.id) return;
+    
+    try {
+      setIsLoading(true);
+      
+      // Süresi dolmuş mining oturumlarını güncelle (backend)
+      try {
+        await miningService.updateExpiredMiningSessions();
+      } catch (err) {
+        console.warn('Mining oturumları güncellenirken hata:', err);
+      }
+      
+      // Frontend verilerini güncelle
+      const [cars, garages, sessions] = await Promise.all([
+        userCarService.getUserCars(user.id),
+        garageService.getUserGarages(user.id),
+        miningService.getAllActiveMiningSessions(user.id)
+      ]);
+      
+      if (cars) {
+        setUserCars(cars);
+        calculateTotalMiningPower(cars);
+        calculateTotalCosts(cars);
+      }
+      
+      if (garages) {
+        setUserGarages(garages);
+        
+        // Toplam ve kullanılabilir garaj alanı hesapla
+        const totalSlots = garages.reduce((total, garage) => total + garage.capacity, 0);
+        // setTotalGarageSlots(totalSlots); // Bu state kullanılmıyorsa kaldır
+        
+        // Kullanılabilir slot sayısı = Toplam kapasite - Aktif mining oturumu sayısı
+        const activeSessions = sessions ? sessions.filter(s => s.status === MiningStatus.ACTIVE).length : 0;
+        setAvailableGarageSlots(Math.max(0, totalSlots - activeSessions));
+      }
+      
+      if (sessions) {
+        // Mining oturumlarını state'e kaydet
+        setActiveMiningSessions(sessions);
+        setupAllTimers(sessions);
+      }
+      
+    } catch (err) {
+      console.error('[MiningArea] fetchData Hatası:', err);
+      toast.error('Veriler yüklenirken bir hata oluştu.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.id, calculateTotalMiningPower, calculateTotalCosts, setupAllTimers]);
+
+  // Sayfa görünür olduğunda veri yenileme için
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !isLoading) {
+        console.log('[MiningArea] Sayfa görünür oldu, veriler yenileniyor...');
+        fetchData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchData, isLoading]);
+  
+  useEffect(() => {
+    fetchData();
+    
+    // Component unmount olduğunda zamanlayıcıları temizle
+    return () => {
+      Object.values(timerRefs).forEach(timer => {
+        if (timer) clearInterval(timer);
+      });
+    };
+  }, [fetchData]);
   
   // Mining oturumunu tamamla
   const completeMiningSession = async (sessionId: number) => {
@@ -432,42 +473,6 @@ export default function MiningArea() {
       setIsLoading(false);
     }
   };
-  
-  // Toplam mining gücünü hesapla
-  const calculateTotalMiningPower = useCallback((cars: UserCar[]) => {
-    let totalPower = 0;
-    let estimatedReward = 0;
-    
-    cars.forEach(car => {
-      if (car.status !== CarStatus.SOLD) {
-        const miningPower = car.car_model?.mining_power || 0;
-        totalPower += miningPower;
-        
-        // Tahmini 8 saatlik ödülü hesapla
-        const hourlyReward = calculateMiningReward(miningPower, 8);
-        estimatedReward += hourlyReward;
-      }
-    });
-    
-    setTotalMiningPower(totalPower);
-    setTotalEstimatedReward(estimatedReward);
-  }, []);
-  
-  // Toplam bakım ve yakıt maliyetlerini hesapla
-  const calculateTotalCosts = useCallback((cars: UserCar[]) => {
-    let maintenance = 0;
-    let fuel = 0;
-    
-    cars.forEach(car => {
-      if (car.status !== CarStatus.SOLD) {
-        maintenance += calculateMaintenanceCost(car.condition, 10); // 10 NMFP per % condition
-        fuel += calculateFuelCost(car.fuel, 5); // 5 NMFP per % fuel
-      }
-    });
-    
-    setTotalMaintenanceCost(maintenance);
-    setTotalFuelCost(fuel);
-  }, []);
   
   // Detayları göster/gizle
   const toggleCarDetails = (carId: number) => {
