@@ -103,7 +103,8 @@ export function calculateMiningReward(
   durationHours: number,
   bonusMultiplier: number = 1
 ): number {
-  const baseHourlyRate = miningPower / 60; // Her 60 mining gücü için saatte 1 NMFP
+  // Mining gücü doğrudan saatlik NMFP kazancını temsil eder
+  const baseHourlyRate = miningPower; // Artık 60'a bölünmüyor
   return baseHourlyRate * durationHours * bonusMultiplier;
 }
 

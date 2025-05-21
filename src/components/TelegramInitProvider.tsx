@@ -439,7 +439,7 @@ export default function TelegramInitProvider({
           // Başarılı
           setUser(response.user);
           console.log('[TelegramInitProvider] User state güncellendi:', response.user);
-          
+        
           // Yeni kullanıcı ise, hoş geldin mesajı göster
           if (response.isNew) {
             console.log('[TelegramInitProvider] Yeni kullanıcı tespit edildi.');
@@ -462,8 +462,8 @@ export default function TelegramInitProvider({
       } catch (firstTryError) {
         console.error('[TelegramInitProvider] İlk deneme başarısız:', firstTryError);
         // Devam edip zorla oluşturacak
-      }
-      
+        }
+        
       // Force create ile tekrar dene
       try {
         console.log('[TelegramInitProvider] FORCE CREATE ile kullanıcı oluşturuluyor...');
@@ -500,13 +500,13 @@ export default function TelegramInitProvider({
         
         // Hoş geldin mesajı
         let welcomeMessage = 'Hoş geldiniz! Hesabınız yeniden oluşturuldu. 50.000 NMFP, 1 adet 718 Cayman ve 3 araçlık garaj hesabınıza eklendi.';
-        
-        if (isPremium) {
+              
+              if (isPremium) {
           welcomeMessage = 'Hoş geldiniz Premium üye! Hesabınız yeniden oluşturuldu. 100.000 NMFP, 1 adet 911 Carrera, 1 adet 718 Cayman ve 5 araçlık garaj hesabınıza eklendi.';
-        }
-        
-        toast.success(welcomeMessage);
-        
+              }
+              
+              toast.success(welcomeMessage);
+              
       } catch (forceCreateError: any) {
         console.error('[TelegramInitProvider] Force create denemesi başarısız:', forceCreateError);
         throw forceCreateError;

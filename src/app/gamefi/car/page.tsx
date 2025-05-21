@@ -644,6 +644,77 @@ export default function CarPage() {
                           </div>
                         </div>
                       </div>
+                      
+                      {/* Araç Kontrol Butonları - Her araç için göster */}
+                      <div className="p-3 border-t border-[#2a3855]/30 flex space-x-2">
+                        {/* Mining Başlat Butonu */}
+                        {car.status === CarStatus.ACTIVE && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation(); // Tıklamanın üst elemanlara geçmesini önle
+                              setSelectedCar(car); // İlgili aracı seç
+                              setTimeout(() => handleStartMining(), 100); // Mining fonksiyonunu çağır
+                            }}
+                            disabled={car.fuel < 25 || car.condition < 10 || isMiningStarting}
+                            className={`flex-1 py-2 text-xs rounded-lg font-medium transition-all duration-300 
+                              ${car.fuel < 25 || car.condition < 10 ? 
+                                'bg-[#1a1a2e] text-gray-500 cursor-not-allowed' : 
+                                'bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7] text-white hover:shadow-md hover:shadow-[#7b2ff7]/20'
+                              }`}
+                          >
+                            {isMiningStarting ? 'Başlatılıyor...' : 'Mining Başlat'}
+                          </button>
+                        )}
+                        
+                        {/* Yakıt Doldur Butonu */}
+                        {car.status === CarStatus.ACTIVE && car.fuel < 100 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRefillCar(car);
+                            }}
+                            disabled={car.fuel >= 100}
+                            className="flex-1 py-2 text-xs rounded-lg font-medium transition-all duration-300 bg-gradient-to-r from-[#1976d2] to-[#2196f3] text-white hover:shadow-md hover:shadow-[#1976d2]/20"
+                          >
+                            Yakıt ({car.car_model?.refill_cost || 0})
+                          </button>
+                        )}
+                        
+                        {/* Bakım Yap Butonu */}
+                        {car.status === CarStatus.ACTIVE && car.condition < 100 && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRepairCar(car);
+                            }}
+                            disabled={car.condition >= 100}
+                            className="flex-1 py-2 text-xs rounded-lg font-medium transition-all duration-300 bg-gradient-to-r from-[#ed6c02] to-[#ff9800] text-white hover:shadow-md hover:shadow-[#ed6c02]/20"
+                          >
+                            Bakım ({car.car_model?.repair_cost || 0})
+                          </button>
+                        )}
+                        
+                        {/* Araç Mining'de ise durum bilgisi */}
+                        {car.status === CarStatus.MINING && (
+                          <div className="w-full py-2 text-xs rounded-lg font-medium bg-[#1a1a2e]/70 text-[#2ff7c1] text-center flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            Mining Yapıyor
+                          </div>
+                        )}
+                        
+                        {/* Tamir edilme durumunda */}
+                        {car.status === CarStatus.REPAIRING && (
+                          <div className="w-full py-2 text-xs rounded-lg font-medium bg-[#1a1a2e]/70 text-yellow-500 text-center flex items-center justify-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Tamirde...
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

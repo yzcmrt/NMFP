@@ -63,7 +63,7 @@ export default function GameFiPage() {
         
         try {
           cars = await userCarService.getUserCars(userId);
-          console.log('Çekilen Araçlar:', cars);
+      console.log('Çekilen Araçlar:', cars);
         } catch (carError) {
           console.error('Araç verilerini çekerken hata:', carError);
           toast.error('Araç bilgileri yüklenemedi');
@@ -71,7 +71,7 @@ export default function GameFiPage() {
         
         try {
           userGarages = await garageService.getUserGarages(userId);
-          console.log('Çekilen Garajlar:', userGarages);
+      console.log('Çekilen Garajlar:', userGarages);
         } catch (garageError) {
           console.error('Garaj verilerini çekerken hata:', garageError);
           toast.error('Garaj bilgileri yüklenemedi');
@@ -79,7 +79,7 @@ export default function GameFiPage() {
         
         try {
           activeSessions = await miningService.getAllActiveMiningSessions(userId);
-          console.log('Aktif Mining Oturumları:', activeSessions);
+      console.log('Aktif Mining Oturumları:', activeSessions);
         } catch (sessionError) {
           console.error('Mining oturumlarını çekerken hata:', sessionError);
           toast.error('Mining oturumları yüklenemedi');
@@ -87,7 +87,7 @@ export default function GameFiPage() {
         
         try {
           recentTransactions = await transactionService.getUserTransactions(userId, 5);
-          console.log('Son İşlemler:', recentTransactions);
+      console.log('Son İşlemler:', recentTransactions);
         } catch (transactionError) {
           console.error('İşlem verilerini çekerken hata:', transactionError);
           toast.error('İşlem geçmişi yüklenemedi');
@@ -96,16 +96,16 @@ export default function GameFiPage() {
         // Verileri set et
         setUserCars(cars);
         setGarages(userGarages);
-        setActiveMiningSessions(activeSessions);
+      setActiveMiningSessions(activeSessions);
         setTransactions(recentTransactions);
         
         // Kullanıcı verisini de tazeleyelim
         await refreshUserData();
         
-        console.log('✅ fetchInitialData tamamlandı.');
-      } catch (err: any) {
-        console.error('❌ fetchInitialData hatası:', err);
-        toast.error(`İlişkili veriler yüklenirken bir hata oluştu: ${err.message}`);
+      console.log('✅ fetchInitialData tamamlandı.');
+    } catch (err: any) {
+      console.error('❌ fetchInitialData hatası:', err);
+      toast.error(`İlişkili veriler yüklenirken bir hata oluştu: ${err.message}`);
       } finally {
         setDataLoading(false);
       }
