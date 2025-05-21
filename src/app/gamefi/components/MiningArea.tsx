@@ -925,22 +925,22 @@ export default function MiningArea() {
                     
                     {/* Mining işlem alanı */}
                     <div className="grid grid-cols-2 gap-3">
-                      {/* Sol panel - Bakım ve yakıt */}
-                      <div className="space-y-2">
+                      {/* Sol panel - Bakım ve yakıt - Yan yana butonlar */}
+                      <div className="flex gap-2">
                         <button
                           onClick={() => repairSingleCar(user?.id || '', car.id)}
                           disabled={isLoading || car.condition >= 100 || (user?.balance || 0) < calculateMaintenanceCost(car.condition, 10)}
-                          className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 text-white py-2 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg disabled:opacity-50"
+                          className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 text-white py-2 px-2 rounded-lg text-xs font-medium transition-all duration-300 hover:shadow-lg disabled:opacity-50"
                         >
-                          Bakım Yap ({formatCurrency(calculateMaintenanceCost(car.condition, 10))})
+                          Bakım ({formatCurrency(calculateMaintenanceCost(car.condition, 10))})
                         </button>
                         
                         <button
                           onClick={() => refillSingleCar(user?.id || '', car.id)}
                           disabled={isLoading || car.fuel >= 100 || (user?.balance || 0) < calculateFuelCost(car.fuel, 5)}
-                          className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-2 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg disabled:opacity-50"
+                          className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-2 px-2 rounded-lg text-xs font-medium transition-all duration-300 hover:shadow-lg disabled:opacity-50"
                         >
-                          Yakıt Doldur ({formatCurrency(calculateFuelCost(car.fuel, 5))})
+                          Yakıt ({formatCurrency(calculateFuelCost(car.fuel, 5))})
                         </button>
                       </div>
                       
