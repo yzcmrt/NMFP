@@ -445,6 +445,31 @@ export const miningService = {
     }
   },
   
+  // YENİ: Süresi dolmuş mining oturumlarını güncelle
+  updateExpiredMiningSessions: async (): Promise<{ updatedCount: number, sessions: any[] }> => {
+    try {
+      console.log('[updateExpiredMiningSessions] Süresi dolmuş mining oturumları kontrol ediliyor...');
+      
+      const { data, error } = await supabase.rpc('update_expired_mining_sessions');
+      
+      if (error) {
+        console.error('[updateExpiredMiningSessions] RPC hatası:', error);
+        throw error;
+      }
+      
+      console.log('[updateExpiredMiningSessions] Güncellenen oturumlar:', data);
+      
+      // API yanıtını düzenle
+      const updatedCount = data?.updated_count || 0;
+      const sessions = data?.sessions || [];
+      
+      return { updatedCount, sessions };
+    } catch (error) {
+      handleSupabaseError(error, 'updateExpiredMiningSessions');
+      return { updatedCount: 0, sessions: [] };
+    }
+  },
+  
   // YENİ: Uygun araçları hazırla ve topluca mining başlat
   prepareAndStartEligibleCars: async (userId: string, autoPayMaintenance: boolean): Promise<any | null> => { // RPC JSONB döndürüyor, any veya daha spesifik bir tip tanımlanabilir
     try {

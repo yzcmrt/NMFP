@@ -42,69 +42,54 @@ export default function MiningArea() {
   const [availableGarageSlots, setAvailableGarageSlots] = useState(0);
   const [expandedCar, setExpandedCar] = useState<number | null>(null);
 
-  // Verileri getir
+  // Verileri yeniden çek (mining durumlarını günceller)
   const fetchData = useCallback(async () => {
     if (!user?.id) return;
     
-    setIsLoading(true);
-    setError(null);
-    
     try {
-      // Her API çağrısını ayrı try-catch bloklarında yaparak hataya dayanıklı hale getiriyoruz
-      let carsData: UserCar[] = [];
-      let garagesData: Garage[] = [];
-      let activeSessionsData: MiningSession[] = [];
+      setIsLoading(true);
       
+      // Süresi dolmuş mining oturumlarını güncelle (backend)
       try {
-        carsData = await userCarService.getUserCars(user.id);
-        console.log('[MiningArea] Kullanıcı araçları başarıyla alındı:', carsData);
-      } catch (carError) {
-        console.error('[MiningArea] Araç verilerini çekerken hata:', carError);
+        await miningService.updateExpiredMiningSessions();
+      } catch (err) {
+        console.warn('Mining oturumları güncellenirken hata:', err);
       }
       
-      try {
-        garagesData = await garageService.getUserGarages(user.id);
-        console.log('[MiningArea] Kullanıcı garajları başarıyla alındı:', garagesData);
-      } catch (garageError) {
-        console.error('[MiningArea] Garaj verilerini çekerken hata:', garageError);
+      // Frontend verilerini güncelle
+      const [cars, garages, sessions] = await Promise.all([
+        userCarService.getUserCars(user.id),
+        garageService.getUserGarages(user.id),
+        miningService.getAllActiveMiningSessions(user.id)
+      ]);
+      
+      if (cars) {
+        setUserCars(cars);
+        calculateTotalMiningPower(cars);
+        calculateTotalCosts(cars);
       }
       
-      try {
-        // Tüm aktif mining oturumlarını al
-        activeSessionsData = await miningService.getAllActiveMiningSessions(user.id);
-        console.log('[MiningArea] Aktif mining oturumları:', activeSessionsData);
-      } catch (sessionError) {
-        console.error('[MiningArea] Mining oturumu çekerken hata:', sessionError);
+      if (garages) {
+        setUserGarages(garages);
+        
+        // Toplam ve kullanılabilir garaj alanı hesapla
+        const totalSlots = garages.reduce((total, garage) => total + garage.capacity, 0);
+        setAvailableGarageSlots(Math.max(0, totalSlots - sessions.filter(s => s.status === MiningStatus.ACTIVE).length));
       }
       
-      // Kullanıcı bilgilerini yenileyelim
-      await refreshUserData();
+      if (sessions) {
+        // Mining oturumlarını state'e kaydet
+        setActiveMiningSessions(sessions);
+        setupAllTimers(sessions);
+      }
       
-      setUserCars(carsData || []);
-      setUserGarages(garagesData || []);
-      setActiveMiningSessions(activeSessionsData || []);
-      
-      // Garaj kapasitesi hesapla
-      const totalCapacity = (garagesData || []).reduce((total, garage) => total + garage.capacity, 0);
-      const usedSlots = activeSessionsData?.length || 0;
-      setAvailableGarageSlots(totalCapacity - usedSlots);
-      
-      // Mining gücünü ve kazancı hesapla
-      calculateTotalMiningPower(carsData || []);
-      
-      // Bakım ve yakıt maliyetlerini hesapla
-      calculateTotalCosts(carsData || []);
-      
-      // Aktif mining oturumları için zamanlayıcıları kur
-      setupAllTimers(activeSessionsData || []);
-    } catch (err: any) {
-      console.error('[MiningArea] Veri getirme hatası:', err);
-      setError('Veriler yüklenirken bir hata oluştu: ' + err.message);
-      toast.error('Veriler yüklenemedi.');
+    } catch (err) {
+      console.error('[MiningArea] fetchData Hatası:', err);
+      toast.error('Veriler yüklenirken bir hata oluştu.');
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, refreshUserData]);
+  }, [user?.id, calculateTotalMiningPower, calculateTotalCosts, setupAllTimers]);
 
   // Sayfa görünür olduğunda veri yenileme için
   useEffect(() => {
