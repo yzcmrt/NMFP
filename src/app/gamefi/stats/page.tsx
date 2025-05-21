@@ -1,58 +1,249 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { formatCurrency } from '@/app/utils/formatters';
+import { useTelegram } from '@/components/TelegramInitProvider';
+import { supabase } from '@/lib/supabaseClient';
+import { toast } from 'react-hot-toast';
 
-// İstatistikler için örnek veriler
-const earningData = [
-  { name: 'Pzt', value: 480 },
-  { name: 'Sal', value: 520 },
-  { name: 'Çar', value: 550 },
-  { name: 'Per', value: 580 },
-  { name: 'Cum', value: 490 },
-  { name: 'Cts', value: 600 },
-  { name: 'Paz', value: 620 },
-];
+// Tip tanımlamaları
+interface UserWeeklyStat {
+  id: number;
+  user_id: string;
+  week_start_date: string;
+  week_end_date: string;
+  total_mining_sessions: number;
+  total_mining_time: string;
+  total_earnings: number;
+  checkin_days: number;
+  best_car_id: number | null;
+  best_car_earnings: number;
+  created_at: string;
+  // İlişkili veri
+  best_car?: {
+    id: number;
+    name: string;
+    car_model?: {
+      name: string;
+      rarity: string;
+    }
+  };
+}
 
-const carPerformanceData = [
-  { 
-    name: 'Tesla Model X', 
-    earning: 580, 
-    efficiency: 85, 
-    totalEarned: 12460,
-    color: '#8884d8' 
-  },
-  { 
-    name: 'Tesla Model 3', 
-    earning: 320, 
-    efficiency: 92, 
-    totalEarned: 8240,
-    color: '#82ca9d' 
-  },
-  { 
-    name: 'Mercedes EQS', 
-    earning: 150, 
-    efficiency: 78, 
-    totalEarned: 4120,
-    color: '#ffc658' 
-  },
-];
+interface CarPerformance {
+  name: string;
+  earning: number;
+  efficiency: number;
+  totalEarned: number;
+  color: string;
+}
 
-const activityData = [
-  { name: 'Araba', value: 42 },
-  { name: 'Görev', value: 28 },
-  { name: 'Market', value: 18 },
-  { name: 'Diğer', value: 12 },
-];
+interface ActivityData {
+  name: string;
+  value: number;
+}
+
+interface MiningSessionStats {
+  day: string;
+  value: number;
+}
+
+// İstatistik servisi
+const statsService = {
+  getUserWeeklyStats: async (userId: string): Promise<UserWeeklyStat | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('user_weekly_stats')
+        .select(`
+          *,
+          best_car:user_cars(
+            id, name,
+            car_model:car_models(name, rarity)
+          )
+        `)
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null; // Kayıt bulunamadı
+        console.error('getUserWeeklyStats hatası:', error);
+        throw error;
+      }
+      
+      return data as UserWeeklyStat;
+    } catch (error) {
+      console.error('İstatistikler getirilirken hata oluştu:', error);
+      return null;
+    }
+  },
+  
+  getMiningSessionsByDay: async (userId: string, timeRange: string): Promise<MiningSessionStats[]> => {
+    try {
+      let daysToQuery = 7; // varsayılan haftalık
+      
+      if (timeRange === 'daily') {
+        daysToQuery = 1;
+      } else if (timeRange === 'monthly') {
+        daysToQuery = 30;
+      }
+      
+      const { data, error } = await supabase.rpc('get_daily_mining_stats', {
+        p_user_id: userId,
+        p_days: daysToQuery
+      });
+
+      if (error) {
+        console.error('Günlük mining istatistikleri hatası:', error);
+        throw error;
+      }
+      
+      // Günlük isimlerin Türkçe karşılıkları
+      const dayNames: {[key: string]: string} = {
+        'Mon': 'Pzt', 
+        'Tue': 'Sal', 
+        'Wed': 'Çar', 
+        'Thu': 'Per', 
+        'Fri': 'Cum', 
+        'Sat': 'Cts', 
+        'Sun': 'Paz'
+      };
+      
+      // Veriyi dönüştür
+      if (Array.isArray(data)) {
+        return data.map(item => ({
+          day: dayNames[item.day_name] || item.day_name,
+          value: item.total_reward || 0
+        }));
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('Mining istatistikleri getirilirken hata oluştu:', error);
+      return [];
+    }
+  },
+  
+  getCarPerformanceStats: async (userId: string): Promise<CarPerformance[]> => {
+    try {
+      const { data, error } = await supabase.rpc('get_car_performance_stats', {
+        p_user_id: userId
+      });
+      
+      if (error) {
+        console.error('Araç performans istatistikleri hatası:', error);
+        throw error;
+      }
+      
+      const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F'];
+      
+      // Veriyi dönüştür
+      if (Array.isArray(data)) {
+        return data.map((item, index) => ({
+          name: item.car_name || `Araç ${item.car_id}`,
+          earning: Math.round(item.avg_daily_earning || 0),
+          efficiency: Math.round(item.efficiency_percent || 0),
+          totalEarned: item.total_earned || 0,
+          color: colors[index % colors.length]
+        }));
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('Araç performans istatistikleri getirilirken hata oluştu:', error);
+      return [];
+    }
+  },
+  
+  getActivityDistribution: async (userId: string): Promise<ActivityData[]> => {
+    try {
+      const { data, error } = await supabase.rpc('get_activity_distribution', {
+        p_user_id: userId
+      });
+      
+      if (error) {
+        console.error('Aktivite dağılımı hatası:', error);
+        throw error;
+      }
+      
+      // Veriyi dönüştür
+      if (Array.isArray(data)) {
+        return data.map(item => ({
+          name: item.activity_type,
+          value: item.percentage
+        }));
+      }
+      
+      // Veri yoksa varsayılan değerler
+      return [
+        { name: 'Mining', value: 70 },
+        { name: 'Görev', value: 15 },
+        { name: 'Market', value: 10 },
+        { name: 'Diğer', value: 5 },
+      ];
+    } catch (error) {
+      console.error('Aktivite dağılımı getirilirken hata oluştu:', error);
+      // Hata durumunda varsayılan veri
+      return [
+        { name: 'Mining', value: 70 },
+        { name: 'Görev', value: 15 },
+        { name: 'Market', value: 10 },
+        { name: 'Diğer', value: 5 },
+      ];
+    }
+  }
+};
 
 const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042'];
 
 export default function StatsPage() {
+  const { user: contextUser, isLoading: providerLoading } = useTelegram();
   const [timeRange, setTimeRange] = useState('weekly');
+  const [dataLoading, setDataLoading] = useState(true);
   
+  // İstatistik verileri için state'ler
+  const [earningData, setEarningData] = useState<MiningSessionStats[]>([]);
+  const [carPerformanceData, setCarPerformanceData] = useState<CarPerformance[]>([]);
+  const [activityData, setActivityData] = useState<ActivityData[]>([]);
+  const [weeklyStats, setWeeklyStats] = useState<UserWeeklyStat | null>(null);
+  
+  const loadStatsData = async (userId: string) => {
+    setDataLoading(true);
+    try {
+      // Paralel olarak tüm veri isteklerini başlat
+      const [dailyStats, carStats, activityStats, userWeeklyStats] = await Promise.all([
+        statsService.getMiningSessionsByDay(userId, timeRange),
+        statsService.getCarPerformanceStats(userId),
+        statsService.getActivityDistribution(userId),
+        statsService.getUserWeeklyStats(userId)
+      ]);
+      
+      // Sonuçları state'lere ata
+      setEarningData(dailyStats);
+      setCarPerformanceData(carStats);
+      setActivityData(activityStats);
+      setWeeklyStats(userWeeklyStats);
+      
+    } catch (error) {
+      console.error('İstatistik verileri yüklenirken hata:', error);
+      toast.error('İstatistik verileri yüklenemedi');
+    } finally {
+      setDataLoading(false);
+    }
+  };
+  
+  // User değiştiğinde ve timeRange değiştiğinde verileri yeniden yükle
+  useEffect(() => {
+    if (contextUser?.id) {
+      loadStatsData(contextUser.id);
+    }
+  }, [contextUser, timeRange]);
+  
+  // Hesaplanan değerler
   const totalEarnings = earningData.reduce((total, entry) => total + entry.value, 0);
-  const averageEarning = totalEarnings / earningData.length;
+  const averageEarning = earningData.length > 0 ? totalEarnings / earningData.length : 0;
   
   type TooltipProps = {
     active?: boolean;
@@ -87,6 +278,42 @@ export default function StatsPage() {
     }
     return null;
   };
+
+  // Yükleniyor göstergesi
+  if (providerLoading || dataLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <div className="w-12 h-12 border-4 border-t-4 border-gray-200 rounded-full animate-spin mb-4 border-t-[#7b2ff7]"></div>
+        <p className="text-white">İstatistikler yükleniyor...</p>
+      </div>
+    );
+  }
+
+  // Kullanıcı giriş yapmamışsa mesaj göster
+  if (!contextUser) {
+    return (
+      <div className="flex flex-col items-center justify-center h-screen">
+        <p className="text-white mb-4">İstatistikleri görmek için giriş yapmalısınız.</p>
+      </div>
+    );
+  }
+  
+  // Veri yoksa mesaj göster
+  if (earningData.length === 0 && carPerformanceData.length === 0) {
+    return (
+      <div className="pb-12">
+        <div className="mobile-app-header relative mb-6">
+          <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#7b2ff7] via-[#2f7bf7] to-[#2ff7c1] opacity-80"></div>
+          <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">İstatistikler</h1>
+        </div>
+        
+        <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-6 rounded-xl border border-[#2a3855] shadow-md text-center">
+          <p className="text-white mb-4">Henüz yeterli istatistik verisi bulunmuyor.</p>
+          <p className="text-gray-400">Mining yaparak ve diğer aktiviteleri tamamlayarak istatistiklerinizin oluşmasını sağlayabilirsiniz.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-12">
@@ -135,7 +362,9 @@ export default function StatsPage() {
           
           {/* Kazanç Grafiği */}
           <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
-            <h3 className="text-sm font-medium mb-4 text-white">Haftalık Kazanç Grafiği</h3>
+            <h3 className="text-sm font-medium mb-4 text-white">
+              {timeRange === 'daily' ? 'Günlük' : timeRange === 'weekly' ? 'Haftalık' : 'Aylık'} Kazanç Grafiği
+            </h3>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
@@ -149,7 +378,7 @@ export default function StatsPage() {
                     </linearGradient>
                   </defs>
                   <XAxis 
-                    dataKey="name" 
+                    dataKey="day" 
                     tick={{ fontSize: 10, fill: '#9ca3af' }} 
                     axisLine={{ stroke: '#2a3855' }}
                     tickLine={false}
@@ -188,8 +417,8 @@ export default function StatsPage() {
                       </svg>
                     </div>
                     <div>
-                      <div className="text-sm font-medium text-white">{item.name}</div>
-                      <div className="text-xs text-gray-400">Araba Kazancı</div>
+                      <div className="text-sm font-medium text-white">{item.day}</div>
+                      <div className="text-xs text-gray-400">Mining Kazancı</div>
                     </div>
                   </div>
                   <div className="text-[#2ff7c1] font-medium">
@@ -201,79 +430,80 @@ export default function StatsPage() {
           </div>
           
           {/* Araç Performansı */}
-          <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
-            <h3 className="text-sm font-medium mb-4 text-white">Araç Performansı</h3>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={carPerformanceData}
-                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2a3855" />
-                  <XAxis 
-                    dataKey="name" 
-                    tick={{ fontSize: 10, fill: '#9ca3af' }} 
-                    axisLine={{ stroke: '#2a3855' }}
-                    tickLine={false}
-                  />
-                  <YAxis 
-                    hide={true}
-                  />
-                  <Tooltip content={<CarPerformanceTooltip />} />
-                  <Bar dataKey="earning" fill="#7b2ff7" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="efficiency" fill="#2f7bf7" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+          {carPerformanceData.length > 0 && (
+            <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
+              <h3 className="text-sm font-medium mb-4 text-white">Araç Performansı</h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={carPerformanceData}
+                    margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2a3855" />
+                    <XAxis 
+                      dataKey="name" 
+                      tick={{ fontSize: 10, fill: '#9ca3af' }} 
+                      axisLine={{ stroke: '#2a3855' }}
+                      tickLine={false}
+                    />
+                    <YAxis 
+                      hide={true}
+                    />
+                    <Tooltip content={<CarPerformanceTooltip />} />
+                    <Bar dataKey="earning" fill="#7b2ff7" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="efficiency" fill="#2f7bf7" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
+          )}
           
           {/* Aktivite Dağılımı */}
-          <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
-            <h3 className="text-sm font-medium mb-4 text-white">Aktivite Dağılımı</h3>
-            <div className="h-64 flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={activityData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {activityData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    formatter={(value) => [`${value}%`, 'Aktivite']}
-                    itemStyle={{ color: '#fff' }}
-                    contentStyle={{ backgroundColor: '#1a1a2e', borderColor: '#2a3855' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-          
-          {/* Aktivite Legend */}
-          <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
-            <h3 className="text-sm font-medium mb-4 text-white">Aktivite Türleri</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {activityData.map((item, index) => (
-                <div key={index} className="flex items-center">
-                  <div 
-                    className="w-4 h-4 rounded-full mr-2" 
-                    style={{ backgroundColor: COLORS[index % COLORS.length] }}
-                  ></div>
-                  <div className="flex-1">
-                    <div className="text-sm text-white">{item.name}</div>
-                    <div className="text-xs text-gray-400">{item.value}%</div>
+          {activityData.length > 0 && (
+            <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
+              <h3 className="text-sm font-medium mb-4 text-white">Aktivite Dağılımı</h3>
+              <div className="h-64 flex items-center justify-center">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={activityData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {activityData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value) => [`${value}%`, 'Aktivite']}
+                      itemStyle={{ color: '#fff' }}
+                      contentStyle={{ backgroundColor: '#1a1a2e', borderColor: '#2a3855' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              
+              {/* Aktivite Legend */}
+              <div className="grid grid-cols-2 gap-3 mt-4">
+                {activityData.map((item, index) => (
+                  <div key={index} className="flex items-center">
+                    <div 
+                      className="w-4 h-4 rounded-full mr-2" 
+                      style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                    ></div>
+                    <div className="flex-1">
+                      <div className="text-sm text-white">{item.name}</div>
+                      <div className="text-xs text-gray-400">{item.value}%</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
