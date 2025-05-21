@@ -197,7 +197,8 @@ export const userCarService = {
    // Araç tamirini başlat (RPC)
   repairCar: async (userId: string, carId: number): Promise<boolean> => {
       try {
-          const { data, error } = await supabase.rpc('repair_car', {
+          // Fonksiyon çakışmasını önlemek için fonksiyon adını spesifik olarak belirtiyoruz
+          const { data, error } = await supabase.rpc('repair_car_uuid', {
               p_user_id: userId,
               p_car_id: carId
           });
@@ -212,7 +213,8 @@ export const userCarService = {
    // Araç yakıtını doldur (RPC)
   refillCar: async (userId: string, carId: number): Promise<boolean> => {
       try {
-          const { data, error } = await supabase.rpc('refill_car', {
+          // Fonksiyon çakışmasını önlemek için fonksiyon adını spesifik olarak belirtiyoruz
+          const { data, error } = await supabase.rpc('refill_car_uuid', {
               p_user_id: userId,
               p_car_id: carId
           });

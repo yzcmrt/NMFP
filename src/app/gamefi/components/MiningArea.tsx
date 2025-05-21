@@ -101,6 +101,14 @@ export default function MiningArea() {
     
     sessions.forEach(session => {
       if (session.status === MiningStatus.ACTIVE) {
+        // LocalStorage'a session bilgilerini kaydet
+        localStorage.setItem(`miningSession_${session.id}`, JSON.stringify({
+          startTime: session.start_time,
+          endTime: session.end_time,
+          sessionId: session.id,
+          status: session.status
+        }));
+        
         const timer = setupTimer(
           new Date(session.end_time),
           (formattedTimeLeft, progressValue) => {
@@ -120,6 +128,16 @@ export default function MiningArea() {
                 return s;
               });
             });
+            
+            // LocalStorage'daki durumu güncelle
+            const sessionData = localStorage.getItem(`miningSession_${session.id}`);
+            if (sessionData) {
+              const parsed = JSON.parse(sessionData);
+              localStorage.setItem(`miningSession_${session.id}`, JSON.stringify({
+                ...parsed,
+                status: MiningStatus.COMPLETED
+              }));
+            }
             
             // Veriyi yenile
             await fetchData();
@@ -161,10 +179,31 @@ export default function MiningArea() {
       setIsLoading(true);
       
       // Süresi dolmuş mining oturumlarını güncelle (backend)
-      try {
-        await miningService.updateExpiredMiningSessions();
-      } catch (err) {
-        console.warn('Mining oturumları güncellenirken hata:', err);
+      // Bu işlemi her fetchData çağrısında değil, sadece aşağıdaki durumlardan biri varsa yap:
+      // 1. Aktif oturumlar varsa
+      // 2. Son kontrol üzerinden belirli bir süre geçtiyse (localStorage ile takip)
+      let wasUpdated = false;
+      let shouldUpdateSessions = false;
+      
+      // localStorage'dan son kontrol zamanını al
+      const lastUpdateCheck = localStorage.getItem('lastMiningUpdateCheck');
+      const now = Date.now();
+      
+      // Son kontrol yoksa veya 5 dakikadan fazla zaman geçtiyse güncelle
+      if (!lastUpdateCheck || (now - parseInt(lastUpdateCheck, 10)) > 5 * 60 * 1000) {
+        shouldUpdateSessions = true;
+        localStorage.setItem('lastMiningUpdateCheck', now.toString());
+      }
+      
+      if (shouldUpdateSessions) {
+        try {
+          const updateResult = await miningService.updateExpiredMiningSessions();
+          console.log('[MiningArea] Güncellenen oturumlar:', updateResult);
+          // Eğer güncelleme yapıldıysa flag'i ayarla
+          wasUpdated = updateResult.updatedCount > 0;
+        } catch (err) {
+          console.warn('Mining oturumları güncellenirken hata:', err);
+        }
       }
       
       // Frontend verilerini güncelle
@@ -185,7 +224,6 @@ export default function MiningArea() {
         
         // Toplam ve kullanılabilir garaj alanı hesapla
         const totalSlots = garages.reduce((total, garage) => total + garage.capacity, 0);
-        // setTotalGarageSlots(totalSlots); // Bu state kullanılmıyorsa kaldır
         
         // Kullanılabilir slot sayısı = Toplam kapasite - Aktif mining oturumu sayısı
         const activeSessions = sessions ? sessions.filter(s => s.status === MiningStatus.ACTIVE).length : 0;
@@ -198,14 +236,77 @@ export default function MiningArea() {
         setupAllTimers(sessions);
       }
       
+      // Eğer mining oturumları güncellendiyse kullanıcı verilerini de yenile
+      if (wasUpdated) {
+        try {
+          await refreshUserData();
+        } catch (err) {
+          console.warn('Kullanıcı verileri güncellenirken hata:', err);
+        }
+      }
+      
     } catch (err) {
       console.error('[MiningArea] fetchData Hatası:', err);
       toast.error('Veriler yüklenirken bir hata oluştu.');
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, calculateTotalMiningPower, calculateTotalCosts, setupAllTimers]);
+  }, [user?.id, calculateTotalMiningPower, calculateTotalCosts, setupAllTimers, refreshUserData]);
 
+  // LocalStorage'dan oturumları kontrol et
+  useEffect(() => {
+    // Sayfa yüklendiğinde veya yenilendiğinde LocalStorage'daki oturum bilgilerini kontrol et
+    const checkStoredSessions = () => {
+      // Tüm localStorage anahtarlarını tara
+      const miningSessionKeys = Object.keys(localStorage).filter(key => key.startsWith('miningSession_'));
+      
+      if (miningSessionKeys.length > 0) {
+        console.log('[MiningArea] LocalStorage\'da kaydedilmiş mining oturumları bulundu:', miningSessionKeys.length);
+        
+        // Her bir oturum için saat durumunu kontrol et
+        miningSessionKeys.forEach(key => {
+          try {
+            const sessionData = localStorage.getItem(key);
+            if (sessionData) {
+              const parsed = JSON.parse(sessionData);
+              const now = new Date();
+              const endTime = new Date(parsed.endTime);
+              
+              // Oturum süresi dolduysa ve hala "active" olarak işaretlenmişse
+              if (now >= endTime && parsed.status === MiningStatus.ACTIVE) {
+                // Durumu "completed" olarak güncelle
+                localStorage.setItem(key, JSON.stringify({
+                  ...parsed,
+                  status: MiningStatus.COMPLETED
+                }));
+                
+                console.log(`[MiningArea] Oturum süresi dolmuş: ${key}`);
+              }
+            }
+          } catch (err) {
+            console.error(`[MiningArea] LocalStorage oturum verisi işlenirken hata: ${key}`, err);
+          }
+        });
+      }
+    };
+    
+    // İlk çalıştırma
+    checkStoredSessions();
+    
+    // Sayfa görünür olduğunda tekrar kontrol et
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkStoredSessions();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+  
   // Sayfa görünür olduğunda veri yenileme için
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -222,16 +323,31 @@ export default function MiningArea() {
     };
   }, [fetchData, isLoading]);
   
+  // Bileşen monte edildiğinde verileri çek
   useEffect(() => {
-    fetchData();
+    // İlk yükleme
+    let isMounted = true;
+    
+    const loadInitialData = async () => {
+      if (isMounted) await fetchData();
+    };
+    
+    loadInitialData();
+    
+    // İlk yükleme sonrası 60 saniyede bir kontrol et (5 sn yerine)
+    const intervalId = setInterval(() => {
+      if (isMounted && !isLoading) fetchData();
+    }, 60000); // 5000'den 60000'e değiştirildi (1 dakika)
     
     // Component unmount olduğunda zamanlayıcıları temizle
     return () => {
+      isMounted = false;
+      clearInterval(intervalId);
       Object.values(timerRefs).forEach(timer => {
         if (timer) clearInterval(timer);
       });
     };
-  }, [fetchData]);
+  }, []);
   
   // Mining oturumunu tamamla
   const completeMiningSession = async (sessionId: number) => {
@@ -249,6 +365,9 @@ export default function MiningArea() {
           return newTimerRefs;
         });
       }
+
+      // LocalStorage'dan oturum bilgisini kaldır
+      localStorage.removeItem(`miningSession_${sessionId}`);
       
       // Mining session ve car bilgisini al
       const currentSession = activeMiningSessions.find(s => s.id === sessionId);
