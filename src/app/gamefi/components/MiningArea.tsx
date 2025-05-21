@@ -40,7 +40,7 @@ export default function MiningArea() {
   const [totalEstimatedReward, setTotalEstimatedReward] = useState(0);
   const [totalMiningPower, setTotalMiningPower] = useState(0);
   const [availableGarageSlots, setAvailableGarageSlots] = useState(0);
-  const [expandedCar, setExpandedCar] = useState<string | null>(null);
+  const [expandedCar, setExpandedCar] = useState<number | null>(null);
 
   // Verileri getir
   const fetchData = useCallback(async () => {
@@ -163,7 +163,20 @@ export default function MiningArea() {
           },
           async () => {
             // Mining tamamlandı, oturumu güncelle
-            await completeMiningSession(session.id);
+            toast.success('Mining süresi doldu! Ödülünüzü toplamak için "Ödülü Topla" butonuna tıklayın.');
+            
+            // Oturumu UI üzerinde tamamlanmış olarak işaretle
+            setActiveMiningSessions(prev => {
+              return prev.map(s => {
+                if (s.id === session.id) {
+                  return {...s, status: MiningStatus.COMPLETED};
+                }
+                return s;
+              });
+            });
+            
+            // Veriyi yenile
+            await fetchData();
           },
           new Date(session.start_time)
         );
@@ -211,6 +224,15 @@ export default function MiningArea() {
         });
       }
       
+      // Mining session ve car bilgisini al
+      const currentSession = activeMiningSessions.find(s => s.id === sessionId);
+      if (!currentSession) {
+        toast.error('Mining oturumu bulunamadı!');
+        return;
+      }
+      
+      const carId = currentSession.car_id;
+      
       // Mining tamamla
       const reward = await miningService.completeMining(sessionId);
       
@@ -240,6 +262,14 @@ export default function MiningArea() {
         
         // Tüm verileri yenile
         await fetchData();
+        
+        // Kullanıcıya aynı araç ile yeniden mining başlatma seçeneği sun
+        const restartMining = window.confirm('Mining başarıyla tamamlandı! Aynı araç ile yeniden mining başlatmak ister misiniz?');
+        
+        if (restartMining) {
+          // Aynı araçla mining başlat
+          await startMining(carId);
+        }
       }
     } catch (err) {
       console.error('[MiningArea] Mining tamamlama hatası:', err);
@@ -420,13 +450,22 @@ export default function MiningArea() {
   
   // Toplam mining gücünü hesapla
   const calculateTotalMiningPower = useCallback((cars: UserCar[]) => {
-    const activeCars = cars.filter(car => car.status === CarStatus.ACTIVE || car.status === CarStatus.MINING);
-    const power = activeCars.reduce((total, car) => total + (car.car_model?.mining_power || 0), 0);
-    setTotalMiningPower(power);
+    let totalPower = 0;
+    let estimatedReward = 0;
     
-    // Tahmini ödül (8 saatlik)
-    const reward = calculateMiningReward(power, 8);
-    setTotalEstimatedReward(reward);
+    cars.forEach(car => {
+      if (car.status !== CarStatus.SOLD) {
+        const miningPower = car.car_model?.mining_power || 0;
+        totalPower += miningPower;
+        
+        // Tahmini 8 saatlik ödülü hesapla
+        const hourlyReward = calculateMiningReward(miningPower, 8);
+        estimatedReward += hourlyReward;
+      }
+    });
+    
+    setTotalMiningPower(totalPower);
+    setTotalEstimatedReward(estimatedReward);
   }, []);
   
   // Toplam bakım ve yakıt maliyetlerini hesapla
@@ -446,7 +485,7 @@ export default function MiningArea() {
   }, []);
   
   // Detayları göster/gizle
-  const toggleCarDetails = (carId: string) => {
+  const toggleCarDetails = (carId: number) => {
     if (expandedCar === carId) {
       setExpandedCar(null);
     } else {
@@ -717,9 +756,35 @@ export default function MiningArea() {
                       
                       {/* Mining durumu (eğer mining yapıyorsa) */}
                       {car.status === CarStatus.MINING && miningSession && (
-                        <div className="text-xs text-center text-[#2ff7c1]">
-                          Bu araç şu anda mining yapıyor. 
-                          Detaylar yukarıdaki Aktif Mining İşlemleri bölümünde.
+                        <div className="space-y-2 mt-2">
+                          <div className="text-xs text-center text-[#2ff7c1]">
+                            Bu araç şu anda mining yapıyor.
+                          </div>
+                          
+                          {miningSession.status === MiningStatus.ACTIVE && (
+                            <div className="bg-[#1a1a2e]/70 p-2 rounded-lg">
+                              <div className="flex justify-between text-xs mb-1">
+                                <span className="text-gray-400">Kalan Süre:</span>
+                                <span className="font-mono text-[#2ff7c1]">{timeLeft[miningSession.id] || '--:--:--'}</span>
+                              </div>
+                              <div className="w-full h-2 bg-[#0d1423] rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7]"
+                                  style={{ width: `${progress[miningSession.id] || 0}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          )}
+                          
+                          {miningSession.status === MiningStatus.COMPLETED && (
+                            <button
+                              onClick={() => completeMiningSession(miningSession.id)}
+                              disabled={isClaimLoading[miningSession.id]}
+                              className="w-full bg-gradient-to-r from-[#2ff7c1] to-[#5ff7d5] text-[#0d253f] py-2 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#2ff7c1]/30 disabled:opacity-50"
+                            >
+                              {isClaimLoading[miningSession.id] ? 'İşleniyor...' : 'Ödülü Topla'}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
