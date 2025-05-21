@@ -73,6 +73,9 @@ export default function CarPage() {
   // Yerel mining oturumlarını saklamak için bir state
   const [localMiningSessions, setLocalMiningSessions] = useState<{[key: number]: {endTime: number, startTime: number, status: string}}>({});
 
+  // Yeni state ekliyoruz
+  const [shouldCleanup, setShouldCleanup] = useState(false);
+
   // Fetch user cars when user context is available
   useEffect(() => {
     const fetchUserCars = async () => {
@@ -456,7 +459,7 @@ export default function CarPage() {
               setUserCars(updatedCars);
               // Mining oturumlarını yenile
               fetchMiningSessions();
-          } else {
+                } else {
               throw new Error('Tamir işlemi başarısız oldu.');
           }
       } catch (error: any) {
@@ -484,7 +487,7 @@ export default function CarPage() {
               setUserCars(updatedCars);
               // Mining oturumlarını yenile
               fetchMiningSessions();
-          } else {
+        } else {
               throw new Error('Yakıt doldurma işlemi başarısız oldu.');
           }
       } catch (error: any) {
@@ -504,8 +507,8 @@ export default function CarPage() {
 
   // Mining oturumlarını ve zamanlayıcıları kur
   const setupMiningTimers = useCallback((sessions: MiningSession[]) => {
-    // Önce eski timerlari temizle
-    clearAllTimers();
+    // Temizlik için state kullan
+    setShouldCleanup(true);
     
     // Her session için yeni timer kur
     const newTimerRefs: {[key: number]: NodeJS.Timeout | null} = {};
@@ -567,11 +570,23 @@ export default function CarPage() {
       }
     });
     
+    // Önce clearAllTimers çağırmak yerine, shouldCleanup true olduğunda useEffect içinde çağrılacak
     setTimerRefs(newTimerRefs);
     setTimeLeft(newTimeLeft);
     setProgress(newProgress);
     setLocalMiningSessions(prev => ({...prev, ...newLocalSessions}));
-  }, [clearAllTimers]);
+    
+    // Temizlik yapıldı
+    setShouldCleanup(false);
+  }, [setTimerRefs, setTimeLeft, setProgress, setLocalMiningSessions, shouldCleanup]);
+
+  // Temizlik için useEffect
+  useEffect(() => {
+    // shouldCleanup true olduğunda temizlik yap
+    if (shouldCleanup) {
+      clearAllTimers();
+    }
+  }, [shouldCleanup, clearAllTimers]);
 
   // LocalStorage'dan mining oturumlarını yükle
   useEffect(() => {
@@ -613,7 +628,7 @@ export default function CarPage() {
     } catch (err) {
       console.error('[CarPage] Mining oturumları yüklenirken hata:', err);
     }
-  }, [user?.id, setupMiningTimers, lastUpdateTime]);
+  }, [user?.id, setupMiningTimers, lastUpdateTime, setActiveMiningSessions, setLastUpdateTime]);
 
   // Mining oturumlarını sayfa yüklendiğinde ve kullanıcı değiştiğinde getir
   useEffect(() => {
@@ -627,10 +642,11 @@ export default function CarPage() {
       
       return () => {
         clearInterval(checkInterval);
-        clearAllTimers();
+        // useEffect temizlik fonksiyonunda doğrudan callbackleri çağırmak yerine state kullan
+        setShouldCleanup(true);
       };
     }
-  }, [user?.id, isUserLoading, fetchMiningSessions, clearAllTimers]);
+  }, [user?.id, isUserLoading, fetchMiningSessions]);
 
   // Araç mining'de mi kontrol et
   const isCarMining = (carId: number) => {
@@ -830,13 +846,13 @@ export default function CarPage() {
                                     className="h-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7]"
                                     style={{ width: `${progress[miningSession.id] || 0}%` }}
                                   ></div>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         </div>
+                            )}
                       </div>
-                      
+              </div>
+            </div>
+            
                       {/* Araç Kontrol Butonları - Her araç için göster */}
                       <div className="p-3 border-t border-[#2a3855]/30 flex flex-wrap gap-2">
                         {/* Mining Başlat Butonu */}
@@ -879,14 +895,14 @@ export default function CarPage() {
                         {/* Araç Mining'de ise durum bilgisi */}
                         {car.status === CarStatus.MINING && (
                           <div className="w-full py-2 text-xs rounded-lg font-medium bg-[#1a1a2e]/70 text-[#2ff7c1] text-center flex flex-col items-center justify-center">
-                            <div className="flex items-center">
+                      <div className="flex items-center">
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
+                        </svg>
                               <span>Mining Yapıyor</span>
-                            </div>
-                            
+                    </div>
+                    
                             {/* Kalan süre bilgisi */}
                             {(() => {
                               const session = getMiningSessionForCar(car.id);
@@ -901,26 +917,26 @@ export default function CarPage() {
                                         className="h-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7]"
                                         style={{ width: `${progress[session.id] || 0}%` }}
                                       ></div>
-                                    </div>
-                                  </div>
+                          </div>
+                          </div>
                                 );
                               }
                               return null;
                             })()}
-                          </div>
-                        )}
+                      </div>
+                      )}
                         
                         {/* Tamir edilme durumunda */}
                         {car.status === CarStatus.REPAIRING && (
                           <div className="w-full py-2 text-xs rounded-lg font-medium bg-[#1a1a2e]/70 text-yellow-500 text-center flex items-center justify-center">
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
+                              </svg>
                             Tamirde...
-                          </div>
-                        )}
-                      </div>
                     </div>
+                        )}
+                  </div>
+                </div>
                   );
                 })}
               </div>

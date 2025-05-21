@@ -247,8 +247,8 @@ export default function MiningArea() {
     } catch (err) {
       console.error('[MiningArea] fetchData Hatası:', err);
       toast.error('Veriler yüklenirken bir hata oluştu.');
-    } finally {
-      setIsLoading(false);
+      } finally {
+        setIsLoading(false);
     }
   }, [user?.id, calculateTotalMiningPower, calculateTotalCosts, setupAllTimers, refreshUserData]);
 
@@ -395,11 +395,11 @@ export default function MiningArea() {
         
         // Araçları güncelle (yakıt ve durumları değişmiş olacak)
         const updatedCars = await userCarService.getUserCars(user.id);
-        if (updatedCars) {
-          setUserCars(updatedCars);
-          // Maliyetleri yeniden hesapla
-          calculateTotalCosts(updatedCars);
-        }
+          if (updatedCars) {
+            setUserCars(updatedCars);
+            // Maliyetleri yeniden hesapla
+            calculateTotalCosts(updatedCars);
+          }
         
         // Kullanıcı bakiyesini de güncelle
         await refreshUserData();
@@ -689,7 +689,7 @@ export default function MiningArea() {
           fetchData(),
           refreshUserData()
         ]);
-      } else {
+    } else {
         toast.error('Yakıt doldurma başarısız oldu.', { id: toastId });
       }
     } catch (err) {
@@ -860,16 +860,16 @@ export default function MiningArea() {
                 <div key={car.id} className={`bg-[#16213e]/70 p-4 rounded-lg ${isMining ? 'border border-[#2ff7c1]/30' : ''}`}>
                   {/* Araç üst bilgisi */}
                   <div className="flex justify-between items-center mb-3">
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
                       <div className="w-12 h-12 bg-[#1a1a2e] rounded-md flex items-center justify-center">
                         <span className="text-lg font-bold">{car.name?.substring(0, 1)}</span>
-                      </div>
-                      <div>
-                        <p className="font-medium text-white">{car.name}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-white">{car.name}</p>
                         <div className="flex items-center text-xs gap-1">
-                          <span className={car.status === CarStatus.MINING ? 'text-[#2ff7c1]' : 'text-gray-400'}>
-                            {car.status === CarStatus.MINING ? 'Mining Yapıyor' : 'Hazır'}
-                          </span>
+                        <span className={car.status === CarStatus.MINING ? 'text-[#2ff7c1]' : 'text-gray-400'}>
+                          {car.status === CarStatus.MINING ? 'Mining Yapıyor' : 'Hazır'}
+                        </span>
                           
                           {/* Mining yapıyorsa kalan süreyi göster */}
                           {isMining && miningSession && miningSession.status === MiningStatus.ACTIVE && (
@@ -887,27 +887,27 @@ export default function MiningArea() {
                       {/* Durum göstergeleri */}
                       <div className="flex items-center gap-2 bg-[#1a1a2e] p-1.5 rounded">
                         <div className="flex flex-col items-center">
-                          <div className="w-1.5 h-6 bg-gradient-to-b from-orange-400 to-orange-600 rounded-full overflow-hidden">
-                            <div 
-                              className="w-full bg-[#16213e]/70" 
-                              style={{ height: `${100 - car.condition}%` }}
-                            ></div>
-                          </div>
+                        <div className="w-1.5 h-6 bg-gradient-to-b from-orange-400 to-orange-600 rounded-full overflow-hidden">
+                          <div 
+                            className="w-full bg-[#16213e]/70" 
+                            style={{ height: `${100 - car.condition}%` }}
+                          ></div>
+                        </div>
                           <span className="text-xs text-orange-400 mt-0.5">{car.condition}%</span>
                         </div>
                         <div className="flex flex-col items-center">
-                          <div className="w-1.5 h-6 bg-gradient-to-b from-blue-400 to-blue-600 rounded-full overflow-hidden">
-                            <div 
-                              className="w-full bg-[#16213e]/70" 
-                              style={{ height: `${100 - car.fuel}%` }}
-                            ></div>
+                        <div className="w-1.5 h-6 bg-gradient-to-b from-blue-400 to-blue-600 rounded-full overflow-hidden">
+                          <div 
+                            className="w-full bg-[#16213e]/70" 
+                            style={{ height: `${100 - car.fuel}%` }}
+                          ></div>
                           </div>
                           <span className="text-xs text-blue-400 mt-0.5">{car.fuel}%</span>
                         </div>
                       </div>
-                    </div>
                   </div>
-                  
+                </div>
+                
                   {/* Artık her zaman görünür olacak detay alanı */}
                   <div className="pt-3 border-t border-[#2a3855]/30">
                     <div className="grid grid-cols-2 gap-4 mb-3">
@@ -992,7 +992,7 @@ export default function MiningArea() {
                       </div>
                     </div>
                   </div>
-                </div>
+              </div>
               );
             })}
           </div>
@@ -1007,17 +1007,17 @@ export default function MiningArea() {
         
         <div className="bg-[#16213e]/70 p-4 rounded-lg">
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs text-gray-400 mb-1">Toplam Mining Gücü</p>
-              <p className="text-xl font-bold text-[#2ff7c1]">{formatNumber(totalMiningPower)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-1">8 Saatlik Tahmin</p>
-              <p className="text-xl font-bold text-[#7b2ff7]">{formatCurrency(totalEstimatedReward)}</p>
-            </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">Toplam Mining Gücü</p>
+                  <p className="text-xl font-bold text-[#2ff7c1]">{formatNumber(totalMiningPower)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1">8 Saatlik Tahmin</p>
+                  <p className="text-xl font-bold text-[#7b2ff7]">{formatCurrency(totalEstimatedReward)}</p>
+                </div>
+              </div>
           </div>
-        </div>
       </div>
     </div>
   );
-}
+} 

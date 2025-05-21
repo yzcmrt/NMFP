@@ -122,7 +122,7 @@ export const userCarService = {
       // Gelen JSON veriyi dizi haline getir ve UserCar tipine cast et
       if (data && Array.isArray(data)) {
         console.log('getUserCars: Veri RPC fonksiyonundan başarıyla alındı', data.length);
-        return data as UserCar[];
+      return data as UserCar[];
       } else if (data && typeof data === 'string') {
         // JSON string olarak gelirse
         try {
@@ -293,7 +293,7 @@ export const garageService = {
       // Gelen JSON veriyi dizi haline getir ve Garage tipine cast et
       if (data && Array.isArray(data)) {
         console.log('getUserGarages: Veri RPC fonksiyonundan başarıyla alındı', data.length);
-        return data as Garage[];
+      return data as Garage[]; 
       } else if (data && typeof data === 'string') {
         // JSON string olarak gelirse
         try {
@@ -382,7 +382,7 @@ export const miningService = {
   },
   
   // YENİ: Kullanıcının TÜM aktif mining oturumlarını getir
-  getAllActiveMiningSessions: async (userId: string): Promise<MiningSession[]> => { 
+  getAllActiveMiningSessions: async (userId: string): Promise<MiningSession[]> => {
     try {
       console.log(`[getAllActiveMiningSessions] Kullanıcı ${userId} için aktif ve tamamlanmış mining oturumları getiriliyor...`);
       
@@ -435,12 +435,12 @@ export const miningService = {
         
         console.log(`[startMining] RPC sonucu:`, data);
          
-        if (typeof data === 'number') {
+         if (typeof data === 'number') {
             return data; // Yeni session ID'si
-        } else {
+         } else {
             console.warn('[startMining] RPC beklenenden farklı bir tip döndürdü:', data);
             return null;
-        }
+         }
     } catch (error) {
         handleSupabaseError(error, 'startMining');
         return null;
@@ -592,7 +592,7 @@ export const userService = {
       }
       
       if (!data.user_id) {
-        throw new ApiError('Kullanıcı ID alınamadı.', 500, data);
+         throw new ApiError('Kullanıcı ID alınamadı.', 500, data);
       }
       
       const userId: string = data.user_id;
@@ -625,12 +625,12 @@ export const userService = {
         } as User;
       } else {
         // Kullanıcı detaylarını ayrıca getir
-        console.log(`[getOrCreateUser] RPC sonrası kullanıcı detayları çekiliyor (getUserById): ${userId}`);
+      console.log(`[getOrCreateUser] RPC sonrası kullanıcı detayları çekiliyor (getUserById): ${userId}`);
         userData = await userService.getUserById(userId);
-        
+
         // Kullanıcı verisi kontrolü
-        if (!userData) {
-          console.error(`[getOrCreateUser] userService.getUserById çağrısı sonrası kullanıcı verisi bulunamadı: ID ${userId}`);
+      if (!userData) {
+            console.error(`[getOrCreateUser] userService.getUserById çağrısı sonrası kullanıcı verisi bulunamadı: ID ${userId}`);
           throw new ApiError(`Kullanıcı detayları alınamadı (ID: ${userId})`, 404);
         }
       }
@@ -646,7 +646,7 @@ export const userService = {
 
   // Kullanıcı bilgilerini getir (ID ile)
   getUserById: async (userId: string): Promise<User | null> => {
-    try {
+      try {
         console.log(`[getUserById] Kullanıcı bilgisi alınıyor: ${userId}`);
         
         // Doğrudan eq kullan, filter yerine
@@ -656,12 +656,12 @@ export const userService = {
             .eq('id', userId)
             .maybeSingle();
 
-        if (error) {
+          if (error) {
             console.error(`[getUserById] Kullanıcı bilgisi alınırken hata: ${error.message}`);
-            throw error;
-        }
-        
-        if (!data) {
+              throw error; 
+          }
+          
+          if (!data) {
             console.warn(`[getUserById] ID için kullanıcı bulunamadı: ${userId}`);
             
             // Debug için ilave sorgu yapalım
@@ -673,36 +673,36 @@ export const userService = {
             console.log(`[getUserById] Debug - İlk 5 kullanıcı ID:`, 
                 debugQuery.data?.map(u => u.id));
                 
-            return null;
-        }
+              return null;
+          }
 
         console.log(`[getUserById] Kullanıcı verisi başarıyla alındı:`, data);
-        
-        // Veritabanından gelen veriyi User tipine dönüştür
+
+          // Veritabanından gelen veriyi User tipine dönüştür
         const user: User = {
-            id: data.id,
-            telegram_id: data.telegram_id,
-            username: data.username,
+              id: data.id,
+              telegram_id: data.telegram_id,
+              username: data.username,
             wallet_address: data.wallet_address || null,
             balance: data.balance || 0,
             ton_coins: data.ton_coins || '0',
             xp: data.xp || 0,
             is_premium: Boolean(data.is_premium) || false,
-            level: data.level || 1,
-            last_bonus_collected_at: data.last_bonus_collected_at,
-            first_login_at: data.first_login_at,
-            last_login: data.last_login,
-            created_at: data.created_at,
-            selected_car_id: data.selected_car_id,
-            selected_garage_id: data.selected_garage_id
+              level: data.level || 1,
+              last_bonus_collected_at: data.last_bonus_collected_at,
+              first_login_at: data.first_login_at,
+              last_login: data.last_login,
+              created_at: data.created_at,
+              selected_car_id: data.selected_car_id,
+              selected_garage_id: data.selected_garage_id
         };
         
         return user;
-    } catch (error) {
+      } catch (error) {
         // Hata durumunu logla ve null döndür
         handleSupabaseError(error, `getUserById (ID: ${userId})`);
-        return null;
-    }
+          return null;
+      }
   },
 
   // Kullanıcı bakiyesini güncelle (Backend fonksiyonları bunu halletmeli, bu nadiren kullanılır)
