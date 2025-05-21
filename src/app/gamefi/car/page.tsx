@@ -63,11 +63,15 @@ export default function CarPage() {
   const [purchaseLoading, setPurchaseLoading] = useState<string | null>(null); // Keep for UI feedback during purchase
   const [isMiningStarting, setIsMiningStarting] = useState<{[carId: number]: boolean}>({});  // Her araç için ayrı loading state
   
-  // Mining süreçlerini takip etmek için gerekli state'ler
+  // Mining oturumlarını takip etmek için gerekli state'ler
   const [activeMiningSessions, setActiveMiningSessions] = useState<MiningSession[]>([]);
   const [timeLeft, setTimeLeft] = useState<{[key: number]: string}>({});
   const [progress, setProgress] = useState<{[key: number]: number}>({});
   const [timerRefs, setTimerRefs] = useState<{[key: number]: NodeJS.Timeout | null}>({});
+  const [lastUpdateTime, setLastUpdateTime] = useState(0); // Son güncelleme zamanı için state
+
+  // Yerel mining oturumlarını saklamak için bir state
+  const [localMiningSessions, setLocalMiningSessions] = useState<{[key: number]: {endTime: number, startTime: number, status: string}}>({});
 
   // Fetch user cars when user context is available
   useEffect(() => {
@@ -358,16 +362,7 @@ export default function CarPage() {
             // Refresh user cars list
             const updatedCars = await userCarService.getUserCars(user.id);
             setUserCars(updatedCars);
-            // Select the first car if no car is selected, OR if the selected car is not in the new list
-            if (updatedCars.length > 0) {
-                 const currentSelectedCarIsInList = selectedCar ? updatedCars.some(c => c.id === selectedCar.id) : false;
-                 if (!selectedCar || !currentSelectedCarIsInList) {
-                     setSelectedCar(updatedCars[0]);
-      }
-            }
-            // Optionally switch tab or update user balance display
-            // const updatedUser = await userService.getUserById(user.id);
-            // if (updatedUser) setUser(updatedUser); // Assumes setUser is available from context/props
+            // selectedCar referansını kaldıralım - kullanılmıyor
             setActiveTab('my-cars'); // Switch to my cars tab
         } else {
             throw new Error(`${purchaseType} ile araç satın alma işlemi başarısız oldu (RPC).`);
@@ -516,9 +511,17 @@ export default function CarPage() {
     const newTimerRefs: {[key: number]: NodeJS.Timeout | null} = {};
     const newTimeLeft: {[key: number]: string} = {};
     const newProgress: {[key: number]: number} = {};
+    const newLocalSessions: {[key: number]: {endTime: number, startTime: number, status: string}} = {};
     
     sessions.forEach(session => {
       if (session.status === MiningStatus.ACTIVE) {
+        // Yerel oturum bilgilerini kaydet
+        newLocalSessions[session.id] = {
+          endTime: new Date(session.end_time).getTime(),
+          startTime: new Date(session.start_time).getTime(),
+          status: session.status
+        };
+        
         const timer = setupTimer(
           new Date(session.end_time),
           (formattedTimeLeft, progressValue) => {
@@ -527,11 +530,18 @@ export default function CarPage() {
           },
           async () => {
             console.log(`Mining tamamlandı: Session ID ${session.id}`);
-            // Veriyi yenile
-            if (user?.id) {
-              fetchUserCars();
-              fetchMiningSessions();
-            }
+            // Yerel state'i güncelle, ekstra API çağrısı yapmak yerine
+            setLocalMiningSessions(prev => {
+              const updated = {...prev};
+              if (updated[session.id]) {
+                updated[session.id].status = MiningStatus.COMPLETED;
+              }
+              return updated;
+            });
+            
+            // Sadece minimum gerekli güncellemeleri yap
+            // Diğer API çağrılarını burada çağırmak yerine kullanıcı aksiyonu bekle
+            // Veya setInterval ile daha uzun aralıklarla yap
           },
           new Date(session.start_time)
         );
@@ -560,40 +570,88 @@ export default function CarPage() {
     setTimerRefs(newTimerRefs);
     setTimeLeft(newTimeLeft);
     setProgress(newProgress);
-  }, [clearAllTimers, user?.id]);
+    setLocalMiningSessions(prev => ({...prev, ...newLocalSessions}));
+  }, [clearAllTimers]);
 
-  // Aktif mining oturumlarını getir
+  // LocalStorage'dan mining oturumlarını yükle
+  useEffect(() => {
+    const savedSessions = localStorage.getItem('miningSessionsData');
+    if (savedSessions) {
+      try {
+        const parsedSessions = JSON.parse(savedSessions);
+        setLocalMiningSessions(parsedSessions);
+      } catch (e) {
+        console.error('Kaydedilen mining oturumları çözümlenemedi:', e);
+      }
+    }
+  }, []);
+
+  // LocalStorage'a mining oturumlarını kaydet
+  useEffect(() => {
+    if (Object.keys(localMiningSessions).length > 0) {
+      localStorage.setItem('miningSessionsData', JSON.stringify(localMiningSessions));
+    }
+  }, [localMiningSessions]);
+
+  // Aktif mining oturumlarını getir - artık daha az sıklıkta
   const fetchMiningSessions = useCallback(async () => {
     if (!user?.id) return;
+    
+    const now = Date.now();
+    // Son API çağrısından bu yana en az 60 saniye geçmiş mi kontrol et
+    if (now - lastUpdateTime < 60000) {
+      console.log('[CarPage] Son API çağrısından bu yana 60 saniye geçmedi, çağrı atlanıyor');
+      return;
+    }
     
     try {
       const sessions = await miningService.getAllActiveMiningSessions(user.id);
       console.log('[CarPage] Mining oturumları:', sessions);
       setActiveMiningSessions(sessions);
       setupMiningTimers(sessions);
+      setLastUpdateTime(now);
     } catch (err) {
       console.error('[CarPage] Mining oturumları yüklenirken hata:', err);
     }
-  }, [user?.id, setupMiningTimers]);
+  }, [user?.id, setupMiningTimers, lastUpdateTime]);
 
   // Mining oturumlarını sayfa yüklendiğinde ve kullanıcı değiştiğinde getir
   useEffect(() => {
     if (user?.id && !isUserLoading) {
       fetchMiningSessions();
+      
+      // Düzenli kontrol için 5 dakikalık interval
+      const checkInterval = setInterval(() => {
+        fetchMiningSessions();
+      }, 300000); // 5 dakika
+      
+      return () => {
+        clearInterval(checkInterval);
+        clearAllTimers();
+      };
     }
-    
-    // Cleanup timers
-    return () => {
-      clearAllTimers();
-    };
   }, [user?.id, isUserLoading, fetchMiningSessions, clearAllTimers]);
 
   // Araç mining'de mi kontrol et
   const isCarMining = (carId: number) => {
-    return activeMiningSessions.some(session => 
+    // Aktif session'lardan kontrol et
+    const isActiveInSessions = activeMiningSessions.some(session => 
       session.car_id === carId && 
       session.status === MiningStatus.ACTIVE
     );
+    
+    // Eğer aktif session'larda yoksa, yerel state'ten kontrol et
+    if (!isActiveInSessions) {
+      // LocalSessions'da bu araç ID'sine sahip bir session var mı?
+      const carSessions = Object.entries(localMiningSessions).filter(([_, session]) => {
+        const associatedSession = activeMiningSessions.find(s => s.id === parseInt(_));
+        return associatedSession && associatedSession.car_id === carId && session.status === MiningStatus.ACTIVE;
+      });
+      
+      return carSessions.length > 0;
+    }
+    
+    return isActiveInSessions;
   };
 
   // Araç için mining oturumunu bul
