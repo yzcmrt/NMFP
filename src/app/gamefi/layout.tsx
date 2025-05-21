@@ -80,7 +80,17 @@ export default function GamefiLayout({
         </nav>
         
         {/* Toast bildirimleri */}
-        <Toaster position="top-center" />
+        <Toaster 
+          position="top-center" 
+          containerStyle={{
+            pointerEvents: "none"
+          }}
+          toastOptions={{
+            style: {
+              pointerEvents: "auto"
+            }
+          }}
+        />
       </div>
     </TelegramInitProvider>
   );
