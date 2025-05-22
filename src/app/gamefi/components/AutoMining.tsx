@@ -43,13 +43,51 @@ export default function AutoMining() {
     checkPremiumStatus();
   }, [checkPremiumStatus]);
   
+  // İşlem sonucunu API'ye gönderme ve doğrulama
+  const verifyTransaction = async (boc: string, toastId: string) => {
+    try {
+      // İşlem sonrası biraz bekleyerek ağda yayılma süresi tanı
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      const apiResponse = await axios.post('/api/auto-mining', {
+        txHash: boc,
+        walletAddress: tonConnectUI.account?.address,
+        userId: user?.id
+      });
+      
+      if (apiResponse.data.success) {
+        toast.success("Otomatik mining özelliği aktifleştirildi!", { id: toastId });
+        setIsPurchased(true);
+        await refreshUserData();
+        return true;
+      } else {
+        const errorMessage = apiResponse.data.message || 'Bilinmeyen hata';
+        toast.error(`İşlem doğrulanamadı: ${errorMessage}`, { id: toastId });
+        
+        if (errorMessage.includes('doğrulanamadı')) {
+          toast.error(
+            "İşlem blockchain'de henüz görünmüyor. Lütfen biraz bekleyip tekrar deneyin.",
+            { id: toastId, duration: 6000 }
+          );
+        }
+        return false;
+      }
+    } catch (error: any) {
+      console.error('API doğrulama hatası:', error);
+      toast.error(`Sunucu hatası: ${error.message}`, { id: toastId });
+      return false;
+    }
+  };
+  
   // TON ile premium mining satın al
   const handlePurchasePremium = async () => {
-    if (!tonConnectUI.connected) {
+    // Bağlantı kontrolü
+    if (!tonConnectUI || !tonConnectUI.connected) {
       toast.error("TON cüzdanınız bağlı değil!");
       return;
     }
     
+    // Kullanıcı kontrolü
     if (!user || !user.id) {
       toast.error("Kullanıcı bilgileri eksik, lütfen tekrar giriş yapın.");
       return;
@@ -59,77 +97,73 @@ export default function AutoMining() {
     const toastId = toast.loading("TON ile otomatik mining satın alınıyor...");
     
     try {
-      // Oyun cüzdan adresi
+      // Oyun cüzdan adresi (çift kontrol)
       const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'UQAC6bB2_GD_CMnBRBTO8HNomIdsH7mID1nk4Pc_NTiVquD3';
       
-      // 1 TON transfer işlemi
+      // İşlem tutarı (1 TON)
+      const amount = toNano('1').toString();
+      
+      // İşlem son geçerlilik zamanı (20 dakika)
+      const validUntil = Math.floor(Date.now() / 1000) + 60 * 20;
+      
+      // İşlem bilgisi
+      const comment = "Auto Mining Purchase";
+      
+      // TON Transfer işlemi (basitleştirilmiş, minimum veri)
       const transaction = {
-        validUntil: Math.floor(Date.now() / 1000) + 60 * 20, // 20 dakika geçerli
+        validUntil,
         messages: [
           {
             address: gameWalletAddress,
-            amount: toNano('1').toString(),
-            payload: 'Auto Mining Purchase'
+            amount: amount
+            // payload belirtilmeden bırakılmış - bazı cüzdanların işlem başarısızlıklarına neden olabilir
           }
         ]
       };
       
-      // TON transfer işlemini gerçekleştir
       toast.loading("TON cüzdanı onay penceresi bekleniyor...", { id: toastId });
-      const result = await tonConnectUI.sendTransaction(transaction);
       
-      if (result && result.boc) {
-        console.log('TON işlem sonucu:', result);
-        toast.loading("İşlem onaylandı, sunucu doğrulaması bekleniyor...", { id: toastId });
+      // İşlem gönderilirken try-catch bloğu ekstra kontrol için
+      try {
+        const result = await tonConnectUI.sendTransaction(transaction);
         
-        // İşlem sonucunu API'ye gönder ve doğrula
-        try {
-          // Biraz bekleyerek işlemin ağa yayılmasına zaman tanı
-          await new Promise(resolve => setTimeout(resolve, 3000));
-          
-          const apiResponse = await axios.post('/api/auto-mining', {
-            txHash: result.boc, // TON işlemi hash
-            walletAddress: tonConnectUI.account?.address,
-            userId: user.id
+        if (result && result.boc) {
+          console.log('TON işlem sonucu (boc başarıyla alındı):', { 
+            bocLength: result.boc.length,
+            hasValidBoc: !!result.boc
           });
           
-          if (apiResponse.data.success) {
-            toast.success("Otomatik mining özelliği aktifleştirildi!", { id: toastId });
-            setIsPurchased(true);
-            
-            // Kullanıcı bilgilerini güncelle
-            await refreshUserData();
-          } else {
-            toast.error(`İşlem doğrulanamadı: ${apiResponse.data.message}`, { id: toastId });
-            console.error('API doğrulama hatası:', apiResponse.data);
-            
-            // Hata durumuyla ilgili daha fazla bilgi ver
-            if (apiResponse.data.message.includes('doğrulanamadı')) {
-              toast.error(
-                "İşlem blockchain'de henüz görünmüyor. Lütfen biraz bekleyip tekrar deneyin.",
-                { id: toastId, duration: 6000 }
-              );
-            }
-          }
-        } catch (apiError: any) {
-          console.error('API hatası:', apiError);
-          toast.error(`Sunucu hatası: ${apiError.message}`, { id: toastId });
+          toast.loading("İşlem onaylandı, sunucu doğrulaması bekleniyor...", { id: toastId });
+          await verifyTransaction(result.boc, toastId);
+        } else {
+          console.error('TON işlemi başarısız - geçersiz boc:', result);
+          toast.error("İşlem başarısız oldu! Geçersiz işlem bilgisi alındı.", { id: toastId });
         }
-      } else {
-        console.error('TON işlemi başarısız (boc yok):', result);
-        toast.error("İşlem başarısız oldu! Sonuç geçersiz.", { id: toastId });
+      } catch (txError: any) {
+        console.error('İşlem gönderme hatası:', txError);
+        
+        let txErrorMessage = "İşlem gönderilemedi";
+        if (txError.message?.includes("magic")) {
+          txErrorMessage = "İşlem kodlanırken hata oluştu. Lütfen TON cüzdanınızı kontrol edip tekrar deneyin.";
+        } else if (txError.message?.includes("emulate")) {
+          txErrorMessage = "İşlem ağ tarafından reddedildi. Lütfen TON bakiyenizi kontrol edin.";
+        }
+        
+        toast.error(txErrorMessage, { id: toastId });
       }
     } catch (error: any) {
-      console.error('TON işlem hatası:', error);
+      console.error('TON işlem hazırlık hatası:', error);
       
-      let errorMessage = "İşlem sırasında bir hata oluştu";
+      let errorMessage = "İşlem sırasında beklenmeyen bir hata oluştu";
       if (error instanceof Error) {
-        if (error.message.includes("rejected")) {
+        if (error.message.includes("rejected") || error.message.includes("cancel")) {
           errorMessage = "İşlem kullanıcı tarafından reddedildi";
-        } else if (error.message.includes("insufficient")) {
+        } else if (error.message.includes("insufficient") || error.message.includes("balance")) {
           errorMessage = "Yetersiz bakiye. Satın alma için yeterli TON yok.";
         } else if (error.message.includes("magic")) {
           errorMessage = "Cüzdan ile iletişimde hata oluştu. Lütfen sayfayı yenileyip tekrar deneyin.";
+        } else if (error.message.includes("timeout")) {
+          errorMessage = "İşlem zaman aşımına uğradı. Lütfen internet bağlantınızı kontrol edin.";
         }
       }
       
@@ -163,10 +197,10 @@ export default function AutoMining() {
               </ul>
               <button
                 onClick={handlePurchasePremium}
-                disabled={isLoading}
+                disabled={isLoading || !tonConnectUI.connected}
                 className="w-full py-2 mt-2 bg-gradient-to-r from-[#7b2ff7] to-[#2f7bf7] text-white rounded-md font-medium hover:from-[#6522d5] hover:to-[#1e6be6] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isLoading ? 'İşleniyor...' : '1 TON ile Satın Al'}
+                {isLoading ? 'İşleniyor...' : !tonConnectUI.connected ? 'TON Cüzdanınızı Bağlayın' : '1 TON ile Satın Al'}
               </button>
             </div>
           </>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TonClient } from '@ton/ton';
-import { Address, Cell } from '@ton/core';
+import { Address, Cell, BOC } from '@ton/core';
 import { createClient } from '@supabase/supabase-js';
 
 // Supabase istemcisini başlat
@@ -15,6 +15,46 @@ const tonClient = new TonClient({
   apiKey: process.env.NEXT_PUBLIC_TON_API_KEY || '',
 });
 
+// BOC formatı doğrulama yardımcı fonksiyonu
+function isValidBoc(bocString: string): boolean {
+  try {
+    if (!bocString || typeof bocString !== 'string') return false;
+    
+    // Standard base64 check
+    const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/;
+    if (!base64Regex.test(bocString)) return false;
+    
+    // Basit uzunluk kontrolü (geçerli BOC en az belirli bir uzunlukta olmalı)
+    if (bocString.length < 24) return false;
+    
+    // Ciddi bir BOC doğrulama denemesi
+    try {
+      const buffer = Buffer.from(bocString, 'base64');
+      
+      // BOC'nin "magic bytes" ile başlayıp başlamadığını kontrol et (b5ee9c72)
+      // Bu, BOC formatının standart başlangıç bytes'larıdır
+      if (buffer.length >= 4) {
+        const magicBytes = buffer.slice(0, 4).toString('hex');
+        // BOC magic bytes kontrolü
+        if (magicBytes !== 'b5ee9c72') {
+          console.warn('BOC magic bytes kontrolü başarısız, geçersiz imza:', magicBytes);
+          return false;
+        }
+      }
+      
+      // Tam doğrulama için BOC parsing denemesi
+      Cell.fromBoc(buffer);
+      return true;
+    } catch (error) {
+      console.error('BOC doğrulama hatası:', error);
+      return false;
+    }
+  } catch (error) {
+    console.error('BOC doğrulama dış hatası:', error);
+    return false;
+  }
+}
+
 // İşlem doğrulama fonksiyonu (geliştirilmiş)
 async function verifyTransaction(
   txHash: string,
@@ -23,32 +63,66 @@ async function verifyTransaction(
   maxAttempts: number = 10,
   retryDelay: number = 2000
 ): Promise<boolean> {
-  console.log('İşlem doğrulama başladı:', { txHash, address, amount });
+  console.log('İşlem doğrulama başladı:', { 
+    txHashLength: txHash ? txHash.length : 0,
+    address, 
+    amount 
+  });
   
-  // txHash veri tipi kontrolü
+  // txHash veri tipi ve format kontrolü
   if (!txHash || typeof txHash !== 'string') {
-    console.error('Geçersiz txHash formatı:', txHash);
+    console.error('Geçersiz txHash formatı (null veya string değil):', txHash);
     return false;
   }
   
-  // Base64 to hex dönüştürme denemesi (eğer txHash Cell.fromBoc olarak geldiyse)
+  // BOC formatını doğrula
+  if (!isValidBoc(txHash)) {
+    console.error('Geçersiz BOC formatı:', { 
+      length: txHash.length,
+      firstChars: txHash.slice(0, 20) + '...',
+      isBase64: /^[A-Za-z0-9+/]+={0,2}$/.test(txHash)
+    });
+    return false;
+  }
+  
+  // Base64 to hex dönüştürme
   let normalizedTxHash: string;
+  let transactionId: string | null = null;
+  
   try {
-    // txHash BOC formatında mı kontrol et
-    if (txHash.startsWith('b64') || txHash.match(/^[A-Za-z0-9+/]+={0,2}$/)) {
-      // boc içeriğini Cell'e dönüştürmeyi dene
+    // Safer BOC parsing
+    let cellFromBoc: Cell;
+    try {
+      // İlk olarak standart yöntemi dene
       const cells = Cell.fromBoc(Buffer.from(txHash, 'base64'));
-      normalizedTxHash = cells[0].hash().toString('hex');
-      console.log('txHash BOC formatından hex\'e dönüştürüldü:', normalizedTxHash);
-    } else {
-      // Zaten hash formatında
-      normalizedTxHash = txHash;
+      cellFromBoc = cells[0];
+    } catch (bocError) {
+      // Alternatif yöntemler
+      try {
+        console.log('Standart BOC çözümleme başarısız, alternatif yöntem deneniyor...');
+        // Bazı durumlarda formatlar farklı olabilir, BOC sınıfını doğrudan kullanarak dene
+        const cells = BOC.fromStandard(Buffer.from(txHash, 'base64'));
+        cellFromBoc = cells[0];
+      } catch (alternativeBocError) {
+        console.error('BOC çözümleme tamamıyla başarısız:', { 
+          initialError: bocError,
+          alternativeError: alternativeBocError 
+        });
+        return false;
+      }
     }
+    
+    // Hash'i al
+    normalizedTxHash = cellFromBoc.hash().toString('hex');
+    transactionId = normalizedTxHash;
+    console.log('BOC başarıyla çözümlendi, hash:', normalizedTxHash);
   } catch (error) {
-    console.warn('txHash dönüştürme hatası, orijinal değer kullanılacak:', error);
+    console.error('BOC çözümleme ve hash alma hatası:', error);
+    // Orijinal txHash'i kullanmaya devam et
     normalizedTxHash = txHash;
   }
   
+  // Blockchain'de işlemi kontrol et
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       // İşlem sonucunu kontrol et
@@ -56,24 +130,32 @@ async function verifyTransaction(
         limit: 10
       });
       
-      console.log(`Kontrol edilen işlemler (${attempt + 1}/${maxAttempts}):`, 
-        transactions.map(tx => ({
-          hash: tx.hash.toString('hex'),
-          lt: tx.lt.toString(),
-          time: tx.time,
-          inAmount: tx.inMessage?.value.toString() || '0'
-        }))
+      console.log(`Blockchain işlem kontrolü (${attempt + 1}/${maxAttempts}):`, 
+        transactions.length > 0 
+          ? `${transactions.length} işlem bulundu`
+          : 'İşlem bulunamadı'
       );
       
-      // İşlemleri hash'e göre filtrele - hem orijinal hem de normalize edilmiş hash'i kontrol et
-      const matchingTx = transactions.find(tx => 
-        tx.hash.toString('hex') === normalizedTxHash || 
-        tx.hash.toString() === txHash ||
-        tx.hash.toString('hex') === txHash
-      );
+      // İşlem eşleşme kontrolü
+      const matchingTx = transactions.find(tx => {
+        const txHashHex = tx.hash.toString('hex');
+        const matches = [
+          // Çeşitli olası eşleşme yöntemleri
+          txHashHex === normalizedTxHash,
+          txHashHex === txHash,
+          transactionId && txHashHex === transactionId,
+          tx.inMessage?.body?.text === 'Auto Mining Purchase'
+        ];
+        
+        return matches.some(match => match === true);
+      });
       
       if (matchingTx) {
-        console.log('İşlem doğrulandı:', matchingTx.hash.toString('hex'));
+        console.log('İşlem doğrulandı:', {
+          hash: matchingTx.hash.toString('hex'),
+          time: matchingTx.time,
+          lt: matchingTx.lt.toString()
+        });
         
         // İşlem miktarını kontrol et
         const inAmount = matchingTx.inMessage?.value.toString() || '0';
@@ -87,7 +169,7 @@ async function verifyTransaction(
         }
       }
       
-      console.log(`İşlem kontrolü (${attempt + 1}/${maxAttempts}): Henüz işlem bulunamadı`);
+      console.log(`İşlem kontrolü (${attempt + 1}/${maxAttempts}): Henüz işlem bulunamadı, yeniden deneniyor...`);
       
       // Bekle ve tekrar dene
       await new Promise(resolve => setTimeout(resolve, retryDelay));
@@ -99,7 +181,11 @@ async function verifyTransaction(
   }
   
   // Maksimum deneme sayısına ulaşıldı, işlem doğrulanamadı
-  console.error('İşlem doğrulanamadı:', txHash);
+  console.error('İşlem doğrulanamadı, maksimum deneme sayısına ulaşıldı:', {
+    txHash: normalizedTxHash.substring(0, 20) + '...',
+    attempts: maxAttempts,
+    totalWaitMs: maxAttempts * retryDelay
+  });
   return false;
 }
 
@@ -211,31 +297,40 @@ export async function POST(request: NextRequest) {
     const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'UQAC6bB2_GD_CMnBRBTO8HNomIdsH7mID1nk4Pc_NTiVquD3';
     
     // İşlemi doğrula
-    console.log('İşlem doğrulanıyor:', txHash);
-    const isVerified = await verifyTransaction(txHash, gameWalletAddress, '1000000000'); // 1 TON
+    console.log('İşlem doğrulanıyor:', txHash ? `${txHash.substring(0, 20)}...` : 'yok');
     
-    if (!isVerified) {
-      console.error('İşlem doğrulanamadı:', txHash);
+    try {
+      const isVerified = await verifyTransaction(txHash, gameWalletAddress, '1000000000'); // 1 TON
+      
+      if (!isVerified) {
+        console.error('İşlem doğrulanamadı:', txHash ? `${txHash.substring(0, 20)}...` : 'yok');
+        return NextResponse.json({
+          success: false,
+          message: 'İşlem doğrulanamadı veya miktar yetersiz. Lütfen daha sonra tekrar deneyin.'
+        });
+      }
+      
+      // Premium özelliği aktifleştir
+      console.log('Premium özelliği aktifleştiriliyor:', userId);
+      const activationResult = await activateAutoMining(userId);
+      
+      return NextResponse.json({
+        success: activationResult.success,
+        message: activationResult.message,
+        txHash: txHash ? `${txHash.substring(0, 20)}...` : 'yok',
+        debug: {
+          verificationSuccess: isVerified,
+          activationCalled: true
+        }
+      });
+    } catch (verifyError: any) {
+      console.error('İşlem doğrulama hatası:', verifyError);
       return NextResponse.json({
         success: false,
-        message: 'İşlem doğrulanamadı veya miktar yetersiz'
-      });
+        message: `İşlem doğrulama hatası: ${verifyError.message || 'Bilinmeyen hata'}`,
+        error: process.env.NODE_ENV === 'development' ? verifyError.toString() : undefined
+      }, { status: 500 });
     }
-    
-    // Premium özelliği aktifleştir
-    console.log('Premium özelliği aktifleştiriliyor:', userId);
-    const activationResult = await activateAutoMining(userId);
-    
-    return NextResponse.json({
-      success: activationResult.success,
-      message: activationResult.message,
-      txHash,
-      debug: {
-        verificationSuccess: isVerified,
-        activationCalled: true
-      }
-    });
-    
   } catch (error: any) {
     console.error('Otomatik mining aktivasyon hatası:', error);
     return NextResponse.json(

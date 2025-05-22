@@ -297,30 +297,78 @@ export default function CarPage() {
             case 'TON':
                 purchasePrice = model.ton_price;
                 currency = 'TON';
-                 // TODO: Add TON balance check if available in 'user' object
+                // TON bakiye kontrolü
                 if (user.ton_coins < purchasePrice) {
-                     throw new Error(`Yetersiz ${currency}. Gerekli: ${purchasePrice}, Mevcut: ${user.ton_coins}`);
+                    throw new Error(`Yetersiz ${currency}. Gerekli: ${purchasePrice}, Mevcut: ${user.ton_coins}`);
                 }
-                // TON transaction logic (if not handled solely by RPC)
+                
+                // TON transaction logic
                 if (tonConnectUI.connected && tonConnectUI.account?.address) {
-                     const nanoTonAmount = toNano(purchasePrice.toString()).toString();
-                     const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY'; // Use actual game wallet
-                     const transaction = {
-                         validUntil: Math.floor(Date.now() / 1000) + 60 * 20, // 20 minutes
-                         messages: [
-        {
-          address: gameWalletAddress,
-          amount: nanoTonAmount,
-                                 payload: `Purchase Car TON: ${model.id}` // Include model ID
-        }
-                         ]
-                     };
-                     toast.loading('TON işlemi onaylanıyor...', { id: toastId });
-                     await tonConnectUI.sendTransaction(transaction); // Wait for transaction sending
-                      toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
-              } else {
-                     throw new Error('TON ile satın almak için cüzdanınızı bağlayın.');
-                 }
+                    // Nano TON formatına dönüştür
+                    const nanoTonAmount = toNano(purchasePrice.toString()).toString();
+                    
+                    // Oyun cüzdan adresi (doğrula)
+                    const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY';
+                    
+                    // İşlem geçerlilik süresi (20 dakika)
+                    const validUntil = Math.floor(Date.now() / 1000) + 60 * 20;
+                    
+                    // Basitleştirilmiş işlem yapısı (payload kullanmadan)
+                    const transaction = {
+                        validUntil: validUntil,
+                        messages: [
+                            {
+                                address: gameWalletAddress,
+                                amount: nanoTonAmount
+                                // payload alanını kaldırdık - bu BOC oluşturma sorunlarını önleyebilir
+                            }
+                        ]
+                    };
+                    
+                    toast.loading('TON işlemi onaylanıyor...', { id: toastId });
+                    
+                    try {
+                        // İşlemi gönder ve sonucu bekle
+                        const result = await tonConnectUI.sendTransaction(transaction);
+                        
+                        if (result && result.boc) {
+                            console.log('TON işlem sonucu başarılı:', { 
+                                bocLength: result.boc.length,
+                                hasValidBoc: true
+                            });
+                            
+                            // İşlem başarılı, API'ye doğrulama için gönder
+                            toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
+                            
+                            // 5 saniyelik bekleme süresi ekleyin - işlemin yayılması için
+                            await new Promise(resolve => setTimeout(resolve, 5000));
+                            
+                            // TO-DO: Burada API doğrulama mantığı eklenebilir
+                        } else {
+                            console.error('TON işlemi başarısız - geçersiz boc:', result);
+                            toast.error("İşlem başarısız oldu! Geçersiz işlem sonucu.", { id: toastId });
+                            throw new Error("Geçersiz işlem sonucu");
+                        }
+                    } catch (txError) {
+                        console.error('TON işlem gönderme hatası:', txError);
+                        
+                        let txErrorMessage = "İşlem gönderilemedi";
+                        if (txError instanceof Error) {
+                            if (txError.message?.includes("magic")) {
+                                txErrorMessage = "İşlem oluşturulurken hata oluştu. Lütfen TON cüzdanınızı kontrol edip tekrar deneyin.";
+                            } else if (txError.message?.includes("reject") || txError.message?.includes("cancel")) {
+                                txErrorMessage = "İşlem kullanıcı tarafından iptal edildi.";
+                            } else if (txError.message?.includes("emulate")) {
+                                txErrorMessage = "İşlem simülasyonu başarısız oldu. Lütfen TON bakiyenizi kontrol edin.";
+                            }
+                        }
+                        
+                        toast.error(txErrorMessage, { id: toastId });
+                        throw new Error(txErrorMessage);
+                    }
+                } else {
+                    throw new Error('TON ile satın almak için cüzdanınızı bağlayın.');
+                }
                 break;
             case 'NFT':
                 purchasePrice = model.nft_mint_price;
