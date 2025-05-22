@@ -290,17 +290,10 @@ export default function CarPage() {
             case 'NMFP':
                 purchasePrice = model.nmfp_price;
                 currency = 'NMFP';
-                if (user.balance < purchasePrice) {
-                    throw new Error(`Yetersiz ${currency}. Gerekli: ${purchasePrice}, Mevcut: ${user.balance}`);
-                }
                 break;
             case 'TON':
                 purchasePrice = model.ton_price;
                 currency = 'TON';
-                // TON bakiye kontrolü
-                if (user.ton_coins < purchasePrice) {
-                    throw new Error(`Yetersiz ${currency}. Gerekli: ${purchasePrice}, Mevcut: ${user.ton_coins}`);
-                }
                 
                 // TON transaction logic
                 if (tonConnectUI.connected && tonConnectUI.account?.address) {
@@ -320,7 +313,7 @@ export default function CarPage() {
                             {
                                 address: gameWalletAddress,
                                 amount: nanoTonAmount
-                                // payload alanı veya diğer karmaşık yapılar kaldırıldı
+                                // payload alanı kaldırıldı - BOC oluşturma hatasını önlemek için
                             }
                         ]
                     };
@@ -371,10 +364,7 @@ export default function CarPage() {
             case 'NFT':
                 purchasePrice = model.nft_mint_price;
                 currency = 'TON'; // Minting usually costs TON
-                 // TODO: Add TON balance check
-                if (user.ton_coins < purchasePrice) {
-                    throw new Error(`Yetersiz ${currency} (Mint için). Gerekli: ${purchasePrice}, Mevcut: ${user.ton_coins}`);
-                }
+                
                 // TON transaction logic for minting (if not handled solely by RPC)
                 if (tonConnectUI.connected && tonConnectUI.account?.address) {
                     const nanoTonAmount = toNano(purchasePrice.toString()).toString();

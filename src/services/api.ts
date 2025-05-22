@@ -171,11 +171,25 @@ export const userCarService = {
   // Yeni araç satın al (RPC fonksiyonunu çağır)
   purchaseCar: async (userId: string, modelId: string, purchaseType: 'NMFP' | 'TON' | 'NFT'): Promise<number | null> => { // Yeni user_car ID'sini döndürür
     try {
-      // Yeni v2 fonksiyonunu kullan
-      const { data, error } = await supabase.rpc('purchase_car_v2', {
+      // Kullanıcının cüzdan adresini al (TON işlemleri için)
+      let walletAddress = null;
+      if (purchaseType === 'TON' || purchaseType === 'NFT') {
+        // TonConnect'ten alınabilir veya parametre olarak geçilebilir
+        const { data: userData } = await supabase
+          .from('users')
+          .select('wallet_address')
+          .eq('id', userId)
+          .single();
+        
+        walletAddress = userData?.wallet_address || null;
+      }
+      
+      // Yeni v3 fonksiyonunu kullan
+      const { data, error } = await supabase.rpc('purchase_car_v3', {
         p_user_id: userId,
         p_model_id: modelId,
-        p_purchase_type: purchaseType
+        p_purchase_type: purchaseType,
+        p_wallet_address: walletAddress
       });
 
       if (error) throw error;
@@ -313,14 +327,28 @@ export const garageService = {
     }
   },
 
-   // Yeni garaj satın al (RPC - v2 fonksiyonunu kullanacak şekilde güncellendi)
+   // Yeni garaj satın al (RPC - v3 fonksiyonunu kullanacak şekilde güncellendi)
    purchaseGarage: async (userId: string, templateId: string, purchaseType: 'NMFP' | 'TON' | string): Promise<number | null> => { // Returns new USER garage ID (from garages table)
     try {
-      // Yeni v2 fonksiyonunu kullan
-      const { data, error } = await supabase.rpc('purchase_garage_v2', {
+      // Kullanıcının cüzdan adresini al (TON işlemleri için)
+      let walletAddress = null;
+      if (purchaseType === 'TON') {
+        // TonConnect'ten alınabilir veya parametre olarak geçilebilir
+        const { data: userData } = await supabase
+          .from('users')
+          .select('wallet_address')
+          .eq('id', userId)
+          .single();
+        
+        walletAddress = userData?.wallet_address || null;
+      }
+      
+      // Yeni v3 fonksiyonunu kullan
+      const { data, error } = await supabase.rpc('purchase_garage_v3', {
         p_user_id: userId,
         p_garage_template_id: templateId, // Pass the text template ID (e.g., 'nmfp-3')
-        p_purchase_type: purchaseType
+        p_purchase_type: purchaseType,
+        p_wallet_address: walletAddress
       });
 
       if (error) throw error;

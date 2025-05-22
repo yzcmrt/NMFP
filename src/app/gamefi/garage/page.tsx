@@ -121,10 +121,8 @@ export default function GaragePage() {
         } else if (template.purchase_type === 'ton') {
             purchasePrice = template.price; // Use template.price
             currency = 'TON';
-             // TODO: Add TON balance check if available in 'user' object
-             if (user.ton_coins < purchasePrice) {
-                throw new Error(`Yetersiz ${currency}. Gerekli: ${purchasePrice}, Mevcut: ${user.ton_coins}`);
-             }
+             // TON bakiye kontrolünü kaldırıyoruz - kullanıcı gerçek cüzdanında TON'a sahip olabilir
+             
             // TON transaction logic
             if (tonConnectUI.connected && tonConnectUI.account?.address) {
                  const nanoTonAmount = toNano(purchasePrice.toString()).toString();
