@@ -397,6 +397,57 @@ export default function CarPage() {
                                 hasValidBoc: true
                             });
                             
+                            // Modelin adını standartlaştır - timestamp kullanma
+                            const cleanModelName = model.name
+                                .replace(/^(Porsche|NMFP)\s+/g, '') // Ön ekleri kaldır 
+                                .trim()
+                                .replace(/\s+/g, '_')
+                                .toLowerCase();
+                            
+                            // Temiz dosya adıyla görüntü oluştur (timestamp YOK)
+                            const imageFileName = `car_${cleanModelName}.jpg`;
+                            
+                            // Görsel dosyasını NFT için oluştur
+                            const imageFile = await fetch(model.image_url)
+                                .then(res => res.blob())
+                                .then(blob => new File([blob], imageFileName, { type: 'image/jpeg' }));
+                            
+                            // IPFS servisini yükleme işleminde standart tanımlayıcı ile kullan
+                            const ipfsService = new IPFSService();
+                            const imageCid = await ipfsService.uploadImage(imageFile, cleanModelName);
+                            
+                            // Metadata oluştur - Standart format kullan
+                            const metadata = {
+                                name: model.name, // Orijinal model adını koru
+                                description: model.description || `${model.name} NFT`,
+                                image: `ipfs://${imageCid}`,
+                                attributes: [
+                                    {
+                                        trait_type: "Rarity",
+                                        value: model.rarity
+                                    },
+                                    {
+                                        trait_type: "Model",
+                                        value: model.model || cleanModelName
+                                    },
+                                    {
+                                        trait_type: "Year",
+                                        value: model.year?.toString() || "2023"
+                                    },
+                                    {
+                                        trait_type: "Power",
+                                        value: `${model.power || 0} HP`
+                                    },
+                                    {
+                                        trait_type: "Speed",
+                                        value: `${model.speed || 0} km/h`
+                                    }
+                                ]
+                            };
+                            
+                            // Metadata'yı IPFS'e standart adlandırma ile yükle (timestamp YOK)
+                            const metadataCid = await ipfsService.uploadMetadata(metadata);
+                            
                             toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
                             
                             // 5 saniyelik bekleme süresi ekleyin - işlemin yayılması için

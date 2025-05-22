@@ -60,10 +60,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     // Dosyayı Pinata'ya yükle
     const formDataPinata = new FormData();
-    formDataPinata.append('file', blob, file.originalFilename || `nmfp-car-image-${Date.now()}.jpg`);
+    
+    // Dosya adını temizle ve kullan
+    let fileName = req.body.fileName || file.originalFilename || `car-image-${Date.now()}.jpg`;
+    
+    // Dosya isminde rastgele timestamp bilgisi kullanmaktan kaçın
+    if (!req.body.fileName && file.originalFilename) {
+      fileName = file.originalFilename.replace(/[-_\s]+\d+\./, '.').toLowerCase();
+    }
+    
+    // Blobları FormData'ya ekle
+    formDataPinata.append('file', blob, fileName);
 
     const pinataMetadata = JSON.stringify({
-      name: file.originalFilename || `nmfp-car-image-${Date.now()}`,
+      name: fileName,
     });
     formDataPinata.append('pinataMetadata', pinataMetadata);
 

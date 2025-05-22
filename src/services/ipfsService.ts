@@ -50,6 +50,15 @@ class IPFSService {
     try {
       console.log("IPFS'e metadata yükleniyor:", metadata);
       
+      // Unique bir isim oluştur (timestamp kullanma)
+      const cleanName = metadata.name
+        .replace(/^(Porsche|NMFP)\s+/g, '') // Ön ekleri kaldır
+        .trim()
+        .replace(/\s+/g, '_')
+        .toLowerCase();
+      
+      const metadataName = `metadata_${cleanName}`;
+      
       // Metadata JSON dosyasını oluştur
       const metadataJSON = JSON.stringify(metadata);
       
@@ -60,7 +69,10 @@ class IPFSService {
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ metadata })
+          body: JSON.stringify({ 
+            metadata,
+            fileName: metadataName // Standart dosya adını geçir
+          })
         });
         
         if (!response.ok) {
@@ -76,7 +88,7 @@ class IPFSService {
         // Pinata'ya yükle
         const response = await this.pinata.pinJSONToIPFS(metadata, {
           pinataMetadata: {
-            name: `${metadata.name}-metadata.json`,
+            name: metadataName, // Timestamp kullanmak yerine standart isim
           },
         });
         
@@ -94,17 +106,27 @@ class IPFSService {
   /**
    * Görsel dosyasını IPFS'e yükler
    * @param imageFile Görsel dosyası (File nesnesi)
+   * @param modelIdentifier Benzersiz model tanımlayıcısı
    * @returns IPFS CID (Content Identifier)
    */
-  async uploadImage(imageFile: File): Promise<string> {
+  async uploadImage(imageFile: File, modelIdentifier?: string): Promise<string> {
     try {
       console.log("IPFS'e görsel yükleniyor:", imageFile.name);
+      
+      // Standart bir isim oluştur
+      let cleanFileName = imageFile.name;
+      
+      if (modelIdentifier) {
+        // Model tanımlayıcısından standart bir görsel adı oluştur
+        cleanFileName = `car_${modelIdentifier.toLowerCase().replace(/\s+/g, '_')}.jpg`;
+      }
       
       // İstemci tarafında çalışırken, /api/ipfs/upload-image endpoint'ini kullan
       if (typeof window !== 'undefined') {
         // FormData oluştur
         const formData = new FormData();
         formData.append('file', imageFile);
+        formData.append('fileName', cleanFileName); // Standart dosya adını geçir
         
         const response = await fetch('/api/ipfs/upload-image', {
           method: 'POST',
