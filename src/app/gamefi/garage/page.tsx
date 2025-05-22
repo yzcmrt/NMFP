@@ -128,23 +128,64 @@ export default function GaragePage() {
             // TON transaction logic
             if (tonConnectUI.connected && tonConnectUI.account?.address) {
                  const nanoTonAmount = toNano(purchasePrice.toString()).toString();
-                 const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY'; // Use actual game wallet
+                 const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY';
+                 
+                 // İşlem geçerlilik süresi (20 dakika)
+                 const validUntil = Math.floor(Date.now() / 1000) + 60 * 20;
+                 
+                 // Basitleştirilmiş işlem yapısı - payload'sız sürüm
                  const transaction = {
-                     validUntil: Math.floor(Date.now() / 1000) + 60 * 20, // 20 minutes
-          messages: [
-            {
+                     validUntil: validUntil,
+                     messages: [
+                         {
                              address: gameWalletAddress,
-                             amount: nanoTonAmount,
-                             payload: `Purchase Garage TON: ${template.id}` // Include template ID
+                             amount: nanoTonAmount
+                             // payload alanı kaldırıldı - BOC oluşturma hatasını önlemek için
                          }
                      ]
                  };
+                 
                  toast.loading('TON işlemi onaylanıyor...', { id: toastId });
-                 await tonConnectUI.sendTransaction(transaction); // Wait for transaction sending
-                  toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
-             } else {
-                 throw new Error('TON ile satın almak için cüzdanınızı bağlayın.');
-             }
+                 
+                 try {
+                     // İşlemi gönder ve sonucu bekle
+                     const result = await tonConnectUI.sendTransaction(transaction);
+                     
+                     if (result && result.boc) {
+                         console.log('TON garaj satın alma işlem sonucu başarılı:', { 
+                             bocLength: result.boc.length,
+                             hasValidBoc: true
+                         });
+                         
+                         toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
+                         
+                         // 5 saniyelik bekleme süresi ekleyin - işlemin yayılması için
+                         await new Promise(resolve => setTimeout(resolve, 5000));
+                     } else {
+                         console.error('TON işlemi başarısız - geçersiz boc:', result);
+                         toast.error("İşlem başarısız oldu! Geçersiz işlem sonucu.", { id: toastId });
+                         throw new Error("Geçersiz işlem sonucu");
+                     }
+                 } catch (txError) {
+                     console.error('TON işlem gönderme hatası:', txError);
+                     
+                     let txErrorMessage = "İşlem gönderilemedi";
+                     if (txError instanceof Error) {
+                         if (txError.message?.includes("magic")) {
+                             txErrorMessage = "İşlem oluşturulurken hata oluştu. Lütfen TON cüzdanınızı kontrol edip tekrar deneyin.";
+                         } else if (txError.message?.includes("reject") || txError.message?.includes("cancel")) {
+                             txErrorMessage = "İşlem kullanıcı tarafından iptal edildi.";
+                         } else if (txError.message?.includes("emulate")) {
+                             txErrorMessage = "İşlem simülasyonu başarısız oldu. Lütfen TON bakiyenizi kontrol edin.";
+                         }
+                     }
+                     
+                     toast.error(txErrorMessage, { id: toastId });
+                     throw new Error(txErrorMessage);
+                 }
+            } else {
+                throw new Error('TON ile satın almak için cüzdanınızı bağlayın.');
+            }
         } else {
             throw new Error('Bu garaj şablonu satın alınamaz veya geçersiz tip.');
         }

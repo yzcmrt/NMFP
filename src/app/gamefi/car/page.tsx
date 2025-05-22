@@ -313,14 +313,14 @@ export default function CarPage() {
                     // İşlem geçerlilik süresi (20 dakika)
                     const validUntil = Math.floor(Date.now() / 1000) + 60 * 20;
                     
-                    // Basitleştirilmiş işlem yapısı (payload kullanmadan)
+                    // Basitleştirilmiş işlem yapısı - minimum işlem yapısı kullanılıyor
                     const transaction = {
                         validUntil: validUntil,
                         messages: [
                             {
                                 address: gameWalletAddress,
                                 amount: nanoTonAmount
-                                // payload alanını kaldırdık - bu BOC oluşturma sorunlarını önleyebilir
+                                // payload alanı veya diğer karmaşık yapılar kaldırıldı
                             }
                         ]
                     };
@@ -342,8 +342,6 @@ export default function CarPage() {
                             
                             // 5 saniyelik bekleme süresi ekleyin - işlemin yayılması için
                             await new Promise(resolve => setTimeout(resolve, 5000));
-                            
-                            // TO-DO: Burada API doğrulama mantığı eklenebilir
                         } else {
                             console.error('TON işlemi başarısız - geçersiz boc:', result);
                             toast.error("İşlem başarısız oldu! Geçersiz işlem sonucu.", { id: toastId });
@@ -380,24 +378,64 @@ export default function CarPage() {
                 // TON transaction logic for minting (if not handled solely by RPC)
                 if (tonConnectUI.connected && tonConnectUI.account?.address) {
                     const nanoTonAmount = toNano(purchasePrice.toString()).toString();
-                    const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY'; // Use actual game wallet or NFT collection address?
+                    const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY'; 
+                    
+                    // İşlem geçerlilik süresi (20 dakika)
+                    const validUntil = Math.floor(Date.now() / 1000) + 60 * 20;
+                    
+                    // NFT minteleme için basit transaction yapısı
                     const transaction = {
-                        validUntil: Math.floor(Date.now() / 1000) + 60 * 20, // 20 minutes
+                        validUntil: validUntil,
                         messages: [
                             {
-                                address: gameWalletAddress, // Or Collection Address?
-                                amount: nanoTonAmount,
-                                payload: `Mint Car NFT: ${model.id}` // Include model ID
-                                // Potentially add NFT mint specific payload if needed
+                                address: gameWalletAddress,
+                                amount: nanoTonAmount
+                                // karmaşık payload yapısından kaçınılıyor
                             }
                         ]
                     };
+                    
                     toast.loading('NFT Mint işlemi için TON onayı bekleniyor...', { id: toastId });
-                    await tonConnectUI.sendTransaction(transaction); // Wait for transaction sending
-                     toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
-      } else {
+                    
+                    try {
+                        // İşlemi gönder ve sonucu bekle
+                        const result = await tonConnectUI.sendTransaction(transaction);
+                        
+                        if (result && result.boc) {
+                            console.log('NFT Mint TON işlem sonucu başarılı:', { 
+                                bocLength: result.boc.length,
+                                hasValidBoc: true
+                            });
+                            
+                            toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
+                            
+                            // 5 saniyelik bekleme süresi ekleyin - işlemin yayılması için
+                            await new Promise(resolve => setTimeout(resolve, 5000));
+                        } else {
+                            console.error('NFT Mint TON işlemi başarısız - geçersiz boc:', result);
+                            toast.error("İşlem başarısız oldu! Geçersiz işlem sonucu.", { id: toastId });
+                            throw new Error("Geçersiz işlem sonucu");
+                        }
+                    } catch (txError) {
+                        console.error('NFT Mint TON işlem gönderme hatası:', txError);
+                        
+                        let txErrorMessage = "İşlem gönderilemedi";
+                        if (txError instanceof Error) {
+                            if (txError.message?.includes("magic")) {
+                                txErrorMessage = "İşlem oluşturulurken hata oluştu. Lütfen TON cüzdanınızı kontrol edip tekrar deneyin.";
+                            } else if (txError.message?.includes("reject") || txError.message?.includes("cancel")) {
+                                txErrorMessage = "İşlem kullanıcı tarafından iptal edildi.";
+                            } else if (txError.message?.includes("emulate")) {
+                                txErrorMessage = "İşlem simülasyonu başarısız oldu. Lütfen TON bakiyenizi kontrol edin.";
+                            }
+                        }
+                        
+                        toast.error(txErrorMessage, { id: toastId });
+                        throw new Error(txErrorMessage);
+                    }
+                } else {
                     throw new Error('NFT mintlemek için cüzdanınızı bağlayın.');
-      }
+                }
                 break;
             default:
                 throw new Error('Geçersiz satın alma tipi');
@@ -1113,7 +1151,7 @@ export default function CarPage() {
                           type="button"
                           className={`bg-gradient-to-r from-[#0088cc] to-[#00a2e0] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#0088cc]/30 flex items-center justify-between ${purchaseLoading === `TON-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
                           onClick={() => handlePurchase(model, 'TON')}
-                          disabled={purchaseLoading === `TON-${model.id}`}
+                          disabled={purchaseLoading === `TON-${model.id}` || !tonConnectUI.connected}
                         >
                            {purchaseLoading === `TON-${model.id}` ? 'İşleniyor...' : (
                               <>
@@ -1122,7 +1160,7 @@ export default function CarPage() {
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                             </svg>
-                                  <span>TON ile Satın Al</span>
+                                  <span>{tonConnectUI.connected ? 'TON ile Satın Al' : 'Cüzdan Bağla'}</span>
                           </div>
                                 <span className="font-semibold">{model.ton_price}</span>
                               </>
@@ -1132,7 +1170,7 @@ export default function CarPage() {
                         <button 
                           className={`bg-gradient-to-r from-[#00ff88] to-[#00cc88] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#00ff88]/30 flex items-center justify-between ${purchaseLoading === `NFT-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
                            onClick={() => handlePurchase(model, 'NFT')}
-                           disabled={purchaseLoading === `NFT-${model.id}`}
+                           disabled={purchaseLoading === `NFT-${model.id}` || !tonConnectUI.connected}
                         >
                            {purchaseLoading === `NFT-${model.id}` ? 'İşleniyor...' : (
                             <>
@@ -1141,7 +1179,7 @@ export default function CarPage() {
                                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                                 </svg>
-                                  <span>NFT Olarak Mintle</span>
+                                  <span>{tonConnectUI.connected ? 'NFT Olarak Mintle' : 'Cüzdan Bağla'}</span>
                               </div>
                                 <span className="font-semibold">{model.nft_mint_price} TON</span>
                             </>
