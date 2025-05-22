@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
-import Pinata from 'pinata-sdk';
+import Pinata from '@pinata/sdk';
 
 const pinata = new Pinata(process.env.PINATA_API_KEY || process.env.NEXT_PUBLIC_PINATA_API_KEY, process.env.PINATA_API_SECRET || process.env.NEXT_PUBLIC_PINATA_SECRET_KEY);
 

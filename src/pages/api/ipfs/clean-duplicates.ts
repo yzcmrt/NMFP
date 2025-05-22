@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import Pinata from 'pinata-sdk';
+import Pinata from '@pinata/sdk';
 
 // Pinata SDK'yı başlat
 const pinata = new Pinata(
