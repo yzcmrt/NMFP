@@ -108,7 +108,6 @@ export default function Privacy() {
           If you have any questions about this Privacy Policy, please contact us:
         </p>
         <ul className="list-disc list-inside text-gray-300 space-y-1 ml-4">
-          <li>By email: privacy@needmoneyforporsche.com</li>
           <li>By visiting the Contact page on our website</li>
           <li>By sending a message to our Telegram support channel</li>
         </ul>

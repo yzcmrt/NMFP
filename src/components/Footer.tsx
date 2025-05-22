@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FaTwitter, FaTelegram, FaDiscord } from 'react-icons/fa';
+import { FaTwitter, FaTelegram } from 'react-icons/fa';
 import { useState, useEffect } from 'react';
 
 const Footer = () => {
@@ -100,9 +100,6 @@ const Footer = () => {
               <a href="https://t.me" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
                 <FaTelegram size={24} />
               </a>
-              <a href="https://discord.com" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
-                <FaDiscord size={24} />
-              </a>
             </div>
           </div>
         </div>
@@ -110,6 +107,9 @@ const Footer = () => {
         <div className="mt-10 pt-6 border-t border-zinc-800 text-center">
           <p className="text-xs">
             &copy; {year} NMFP. All rights reserved.
+          </p>
+          <p className="text-xs mt-2 text-gray-500">
+            This game is a parody and is not affiliated with or endorsed by Porsche AG.
           </p>
         </div>
       </div>
