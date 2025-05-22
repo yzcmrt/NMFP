@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { formatCurrency, formatNumber } from '@/app/utils/formatters';
 import MiningArea from './components/MiningArea';
+import AutoMining from './components/AutoMining';
 import { useTelegram } from '@/components/TelegramInitProvider';
 import { supabase } from '@/lib/supabaseClient';
 import { 
@@ -339,7 +340,10 @@ export default function GameFiPage() {
       
       {/* Ana içerik alanı */}
       <div className="space-y-5">
-        {/* Yeni MiningArea Bileşeni */}
+        {/* Otomatik Mining Bileşeni */}
+        <AutoMining />
+        
+        {/* Mevcut MiningArea Bileşeni */}
         <MiningArea />
         
         {/* Son İşlemler */}

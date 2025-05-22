@@ -210,19 +210,22 @@ export interface UserTask {
  * Kullanıcı (users tablosu)
  */
 export interface User {
-  id: string;                   // UUID Primary Key
-  telegram_id: string;          // TEXT UNIQUE NOT NULL (BIGINT yerine TEXT daha esnek)
-  username?: string | null;     // TEXT
-  wallet_address?: string | null;// TEXT
-  balance: number;              // BIGINT DEFAULT 0
-  ton_coins: number;            // NUMERIC DEFAULT 0
-  xp: number;                   // INTEGER DEFAULT 0
-  is_premium: boolean;          // BOOLEAN DEFAULT false
-  level: number;                // INTEGER DEFAULT 1
-  last_bonus_collected_at?: string | null; // TIMESTAMP WITH TIME ZONE
-  first_login_at?: string | null; // TIMESTAMP WITH TIME ZONE
-  last_login?: string | null;   // TIMESTAMP WITH TIME ZONE
-  created_at: string;           // TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-  selected_car_id?: number | null; // INTEGER REFERENCES user_cars(id)
-  selected_garage_id?: number | null; // INTEGER REFERENCES garages(id)
+  id: string;
+  username?: string | null;
+  telegram_id?: string | null;
+  wallet_address?: string | null;
+  balance: number;
+  ton_coins?: string;
+  xp: number;
+  is_premium?: boolean;
+  premium_active?: boolean;
+  premium_until?: string;
+  level: number;
+  selected_car_id?: number | null;
+  selected_garage_id?: number | null;
+  last_bonus_collected_at?: string | null;
+  first_login_at?: string;
+  last_login?: string;
+  created_at: string;
+  updated_at?: string;
 } 
