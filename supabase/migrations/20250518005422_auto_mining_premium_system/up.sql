@@ -119,7 +119,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 2. Tamamlanan premium mining oturumlarını otomatik yenileme
+-- 2. Tamamlanan premium mining oturumlarını otomatik yenileme (geliştirilmiş)
 CREATE OR REPLACE FUNCTION auto_renew_premium_mining()
 RETURNS INTEGER AS $$
 DECLARE
@@ -129,13 +129,21 @@ DECLARE
   car_record RECORD;
   garage_record RECORD;
   new_session_id INTEGER;
+  v_start TIMESTAMP WITH TIME ZONE := NOW();
+  v_err_msg TEXT;
 BEGIN
+  -- Başlangıç logu
+  RAISE NOTICE 'Auto-renew premium mining başladı: %', v_start;
+  
   -- Premium aktif kullanıcıları bul
   FOR user_record IN 
     SELECT id FROM users 
     WHERE premium_active = true 
       AND premium_until > NOW()
   LOOP
+    -- Kullanıcı logu
+    RAISE NOTICE 'Premium kullanıcı işleniyor: %', user_record.id;
+    
     -- Tamamlanan ve henüz yenilenmemiş mining oturumlarını bul
     FOR completed_session IN 
       SELECT ms.* 
@@ -151,43 +159,81 @@ BEGIN
             AND created_at > ms.completed_at
         )
     LOOP
-      -- Araç bilgilerini al
-      SELECT * INTO car_record FROM user_cars WHERE id = completed_session.car_id;
+      -- Mining oturumu logu
+      RAISE NOTICE 'Tamamlanan mining oturumu işleniyor: %', completed_session.id;
       
-      -- Araç aktif durumda ise yeni mining oturumu başlat
-      IF car_record.status = 'active' THEN
-        -- Otomatik tamir ve yakıt doldurma
-        UPDATE user_cars
-        SET 
-          fuel = 100,
-          condition = 100
-        WHERE id = car_record.id;
+      BEGIN -- Her oturum için hata yakalama bloğu
+        -- Araç bilgilerini al
+        SELECT * INTO car_record FROM user_cars WHERE id = completed_session.car_id;
         
-        -- Garaj kontrol et
-        SELECT * INTO garage_record FROM garages WHERE id = completed_session.garage_id;
+        IF car_record IS NULL THEN
+          RAISE NOTICE 'Araç bulunamadı: %', completed_session.car_id;
+          CONTINUE;
+        END IF;
         
-        -- Yeni mining oturumu başlat
-        INSERT INTO mining_sessions (
-          user_id, car_id, garage_id, start_time, end_time, 
-          expected_reward, status, created_at, is_premium_cycle
-        )
-        VALUES (
-          user_record.id, car_record.id, completed_session.garage_id,
-          NOW(), NOW() + INTERVAL '8 hours',
-          completed_session.expected_reward, 'active', NOW(), true
-        )
-        RETURNING id INTO new_session_id;
-        
-        -- Araç durumunu mining yapıyor olarak işaretle
-        UPDATE user_cars
-        SET status = 'mining'
-        WHERE id = car_record.id;
-        
-        renewed_count := renewed_count + 1;
-      END IF;
+        -- Araç aktif durumda ise yeni mining oturumu başlat
+        IF car_record.status = 'active' THEN
+          -- Otomatik tamir ve yakıt doldurma
+          UPDATE user_cars
+          SET 
+            fuel = 100,
+            condition = 100
+          WHERE id = car_record.id;
+          
+          -- Garaj kontrol et
+          SELECT * INTO garage_record FROM garages WHERE id = completed_session.garage_id;
+          
+          IF garage_record IS NULL THEN
+            RAISE NOTICE 'Garaj bulunamadı: %', completed_session.garage_id;
+            -- Yeni garaj bulmayı dene
+            SELECT g.id INTO garage_record.id
+            FROM garages g
+            WHERE g.user_id = user_record.id
+              AND (
+                SELECT COUNT(*) 
+                FROM mining_sessions ms 
+                WHERE ms.garage_id = g.id AND ms.status = 'active'
+              ) < g.capacity
+            LIMIT 1;
+            
+            IF garage_record.id IS NULL THEN
+              RAISE NOTICE 'Uygun garaj bulunamadı, mining yenilenemedi';
+              CONTINUE;
+            END IF;
+          END IF;
+          
+          -- Yeni mining oturumu başlat
+          INSERT INTO mining_sessions (
+            user_id, car_id, garage_id, start_time, end_time, 
+            expected_reward, status, created_at, is_premium_cycle
+          )
+          VALUES (
+            user_record.id, car_record.id, COALESCE(completed_session.garage_id, garage_record.id),
+            NOW(), NOW() + INTERVAL '8 hours',
+            completed_session.expected_reward, 'active', NOW(), true
+          )
+          RETURNING id INTO new_session_id;
+          
+          -- Araç durumunu mining yapıyor olarak işaretle
+          UPDATE user_cars
+          SET status = 'mining'
+          WHERE id = car_record.id;
+          
+          RAISE NOTICE 'Mining oturumu yenilendi: % -> %', completed_session.id, new_session_id;
+          renewed_count := renewed_count + 1;
+        ELSE
+          RAISE NOTICE 'Araç uygun durumda değil: % (durum: %)', car_record.id, car_record.status;
+        END IF;
+      EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS v_err_msg = MESSAGE_TEXT;
+        RAISE NOTICE 'Mining oturumu yenileme hatası: % - %', completed_session.id, v_err_msg;
+        -- Hataya rağmen devam et, diğer mining oturumlarını yenilemeye çalış
+      END;
     END LOOP;
   END LOOP;
   
+  RAISE NOTICE 'Auto-renew premium mining tamamlandı. Yenilenen oturumlar: %, süre: % sn', 
+               renewed_count, EXTRACT(EPOCH FROM (NOW() - v_start));
   RETURN renewed_count;
 END;
 $$ LANGUAGE plpgsql;

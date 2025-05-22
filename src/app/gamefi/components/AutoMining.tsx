@@ -75,13 +75,18 @@ export default function AutoMining() {
       };
       
       // TON transfer işlemini gerçekleştir
+      toast.loading("TON cüzdanı onay penceresi bekleniyor...", { id: toastId });
       const result = await tonConnectUI.sendTransaction(transaction);
       
       if (result && result.boc) {
+        console.log('TON işlem sonucu:', result);
         toast.loading("İşlem onaylandı, sunucu doğrulaması bekleniyor...", { id: toastId });
         
         // İşlem sonucunu API'ye gönder ve doğrula
         try {
+          // Biraz bekleyerek işlemin ağa yayılmasına zaman tanı
+          await new Promise(resolve => setTimeout(resolve, 3000));
+          
           const apiResponse = await axios.post('/api/auto-mining', {
             txHash: result.boc, // TON işlemi hash
             walletAddress: tonConnectUI.account?.address,
@@ -96,13 +101,23 @@ export default function AutoMining() {
             await refreshUserData();
           } else {
             toast.error(`İşlem doğrulanamadı: ${apiResponse.data.message}`, { id: toastId });
+            console.error('API doğrulama hatası:', apiResponse.data);
+            
+            // Hata durumuyla ilgili daha fazla bilgi ver
+            if (apiResponse.data.message.includes('doğrulanamadı')) {
+              toast.error(
+                "İşlem blockchain'de henüz görünmüyor. Lütfen biraz bekleyip tekrar deneyin.",
+                { id: toastId, duration: 6000 }
+              );
+            }
           }
         } catch (apiError: any) {
           console.error('API hatası:', apiError);
           toast.error(`Sunucu hatası: ${apiError.message}`, { id: toastId });
         }
       } else {
-        toast.error("İşlem başarısız oldu!", { id: toastId });
+        console.error('TON işlemi başarısız (boc yok):', result);
+        toast.error("İşlem başarısız oldu! Sonuç geçersiz.", { id: toastId });
       }
     } catch (error: any) {
       console.error('TON işlem hatası:', error);
@@ -113,6 +128,8 @@ export default function AutoMining() {
           errorMessage = "İşlem kullanıcı tarafından reddedildi";
         } else if (error.message.includes("insufficient")) {
           errorMessage = "Yetersiz bakiye. Satın alma için yeterli TON yok.";
+        } else if (error.message.includes("magic")) {
+          errorMessage = "Cüzdan ile iletişimde hata oluştu. Lütfen sayfayı yenileyip tekrar deneyin.";
         }
       }
       
