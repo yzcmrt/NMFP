@@ -183,6 +183,9 @@ export interface Task { // Eski TaskDefinition yerine Task kullanabiliriz
   total: number;                // INTEGER NOT NULL (Görevi tamamlamak için gereken sayı)
   reward: number;               // BIGINT NOT NULL (NMFP cinsinden)
   is_active: boolean;           // BOOLEAN DEFAULT true
+  verification_type?: string | null; // TEXT - 'channel_join', 'bot_command', 'link_click'
+  verification_data?: any;      // JSONB - Doğrulama için gereken veriler
+  verification_method?: string; // TEXT - 'automatic' veya 'manual'
   // SQL şemasında olmayan type ve frequency kaldırıldı
   // SQL şemasında olmayan icon ve unit kaldırıldı
   created_at: string;           // TIMESTAMP WITH TIME ZONE DEFAULT NOW()

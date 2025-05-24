@@ -546,51 +546,63 @@ export const miningService = {
   }
 };
 
-// Görev API servisleri
-export const taskService = {
-    // Aktif görev tanımlarını getir
-  getActiveTasks: async (): Promise<Task[]> => {
-        try {
-            const { data, error } = await supabase
-                .from('tasks')
-                .select('*')
-                .eq('is_active', true);
-
-            if (error) throw error;
-            return data as Task[];
-        } catch (error) {
-            handleSupabaseError(error, 'getActiveTasks');
-            return [];
-        }
+// Task ve UserTask servisleri
+const taskService = {
+  /**
+   * Tüm görevleri getir
+   */
+  async getAllTasks() {
+    try {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('is_active', true)
+        .order('id');
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Görevler alınırken hata:', error);
+      return null;
+    }
   },
-  
-    // Kullanıcının görevlerini getir (görev tanımıyla birlikte)
-    getUserTasks: async (userId: string): Promise<UserTask[]> => {
-        try {
-            const { data, error } = await supabase
-                .from('user_tasks')
-                .select(`
-                    *,
-                    task:tasks(*)
-                `)
-                .eq('user_id', userId);
 
-            if (error) throw error;
-            return data as UserTask[];
-        } catch (error) {
-            handleSupabaseError(error, 'getUserTasks');
-            return [];
-        }
-    },
+  /**
+   * Kullanıcı görevlerini getir
+   */
+  async getUserTasks(userId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('user_tasks')
+        .select('*, task:tasks(*)')
+        .eq('user_id', userId);
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Kullanıcı görevleri alınırken hata:', error);
+      return null;
+    }
+  },
 
-   // Görev ilerlemesini güncelle (Bu fonksiyon genellikle backend trigger'ları veya diğer fonksiyonlar tarafından çağrılır, ama gerekirse RPC eklenebilir)
-   // updateTaskProgress: async (userId: string, taskTitle: string, progressAmount: number): Promise<boolean> => { ... }
-
-   // Tamamlanmış ve ödülü alınmamış görevleri getir (Bu özel bir sorgu gerektirebilir)
-   // getClaimableTasks: async (userId: string): Promise<UserTask[]> => { ... }
-
-   // Görev ödülünü al (Bu RPC fonksiyonu gerektirebilir: claim_task_reward(user_id, user_task_id))
-   // claimTaskReward: async (userTaskId: number): Promise<boolean> => { ... }
+  /**
+   * Görevi manuel olarak doğrula
+   */
+  async verifyTask(userId: string, taskId: number, telegramId?: string) {
+    try {
+      const { data, error } = await supabase.rpc('verify_telegram_task', {
+        p_user_id: userId,
+        p_telegram_id: telegramId || 'manual_verify',
+        p_task_id: taskId
+      });
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Görev doğrulanırken hata:', error);
+      throw error;
+    }
+  }
 };
 
 // Kullanıcı API servisleri
@@ -735,4 +747,104 @@ export const userService = {
 
   // Kullanıcı bakiyesini güncelle (Backend fonksiyonları bunu halletmeli, bu nadiren kullanılır)
   // updateUserBalance: async (userId: string, newBalance: number): Promise<User | null> => { ... }
+}; 
+
+// Cüzdan API servisleri
+const walletService = {
+  /**
+   * Kullanıcı cüzdan adresini ekle/güncelle
+   */
+  async updateWalletAddress(userId: string, walletAddress: string) {
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .update({ wallet_address: walletAddress })
+        .eq('id', userId)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Cüzdan adresi güncellenirken hata:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * TON cüzdan işlemleri geçmişini getir
+   */
+  async getTonTransactions(userId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('ton_transactions')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('TON işlemleri alınırken hata:', error);
+      return [];
+    }
+  }
+};
+
+// Market API servisleri
+const marketplaceService = {
+  /**
+   * Aktif marketplace ürünlerini getir
+   */
+  async getActiveListings(category?: string) {
+    try {
+      let query = supabase
+        .from('marketplace_listings')
+        .select('*')
+        .eq('is_active', true);
+      
+      if (category) {
+        query = query.eq('category', category);
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Marketplace ürünleri alınırken hata:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Kullanıcının market ürünlerini getir
+   */
+  async getUserListings(userId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('marketplace_listings')
+        .select('*')
+        .eq('seller_id', userId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    } catch (error) {
+      console.error('Kullanıcı marketplace ürünleri alınırken hata:', error);
+      return [];
+    }
+  }
+};
+
+export {
+  userService,
+  carModelService,
+  userCarService,
+  transactionService,
+  garageService,
+  miningService,
+  walletService,
+  marketplaceService,
+  taskService
 }; 
