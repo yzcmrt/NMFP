@@ -170,6 +170,20 @@ export default function TaskPage() {
         return '/images/task-garage.svg';
       case 'link_click':
         return '/images/task-driving.svg';
+      case 'car_purchase_nmfp':
+        return '/images/task-garage.svg';
+      case 'car_purchase_ton':
+        return '/images/task-garage.svg';
+      case 'car_mint_nft':
+        return '/images/task-garage.svg';
+      case 'car_repair':
+        return '/images/task-repair.svg';
+      case 'car_refill':
+        return '/images/task-fuel.svg';
+      case 'mining_complete':
+        return '/images/task-mining.svg';
+      case 'collect_bonus':
+        return '/images/task-bonus.svg';
       default:
         return '/images/task-default.svg';
     }
@@ -282,6 +296,69 @@ export default function TaskPage() {
                         className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30"
                       >
                         Sayfayı Ziyaret Et
+                      </a>
+                    )}
+                    
+                    {task.verification_type === 'car_purchase_nmfp' && (
+                      <a 
+                        href="/gamefi/car"
+                        className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30"
+                      >
+                        Araba Marketi
+                      </a>
+                    )}
+                    
+                    {task.verification_type === 'car_purchase_ton' && (
+                      <a 
+                        href="/gamefi/car"
+                        className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30"
+                      >
+                        Araba Marketi
+                      </a>
+                    )}
+                    
+                    {task.verification_type === 'car_mint_nft' && (
+                      <a 
+                        href="/gamefi/car"
+                        className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30"
+                      >
+                        NFT Mintle
+                      </a>
+                    )}
+                    
+                    {task.verification_type === 'car_repair' && (
+                      <a 
+                        href="/gamefi/garage"
+                        className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30"
+                      >
+                        Garaj'a Git
+                      </a>
+                    )}
+                    
+                    {task.verification_type === 'car_refill' && (
+                      <a 
+                        href="/gamefi/garage"
+                        className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30"
+                      >
+                        Yakıt Doldur
+                      </a>
+                    )}
+                    
+                    {task.verification_type === 'mining_complete' && (
+                      <a 
+                        href="/gamefi/garage"
+                        className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30"
+                      >
+                        Mining Başlat
+                      </a>
+                    )}
+                    
+                    {task.verification_type === 'collect_bonus' && (
+                      <a 
+                        href="/gamefi/garage"
+                        className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30"
+                      >
+                        Bonus Topla
                       </a>
                     )}
                     

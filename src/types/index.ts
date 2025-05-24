@@ -183,7 +183,19 @@ export interface Task { // Eski TaskDefinition yerine Task kullanabiliriz
   total: number;                // INTEGER NOT NULL (Görevi tamamlamak için gereken sayı)
   reward: number;               // BIGINT NOT NULL (NMFP cinsinden)
   is_active: boolean;           // BOOLEAN DEFAULT true
-  verification_type?: string | null; // TEXT - 'channel_join', 'bot_command', 'link_click'
+  verification_type?: string | null; // TEXT - Görev doğrulama tipi
+  // Doğrulama tipleri:
+  // 'channel_join' - Telegram kanalına katılma
+  // 'bot_command' - Bot komutu çalıştırma
+  // 'link_click' - Link tıklama
+  // 'car_purchase_nmfp' - NMFP ile araç satın alma
+  // 'car_purchase_ton' - TON ile araç satın alma
+  // 'car_mint_nft' - NFT olarak araç mintleme
+  // 'car_repair' - Araç tamiri
+  // 'car_refill' - Yakıt doldurma
+  // 'mining_complete' - Mining tamamlama
+  // 'collect_bonus' - Günlük bonus toplama
+  // 'manual' - Manuel doğrulama
   verification_data?: any;      // JSONB - Doğrulama için gereken veriler
   verification_method?: string; // TEXT - 'automatic' veya 'manual'
   // SQL şemasında olmayan type ve frequency kaldırıldı

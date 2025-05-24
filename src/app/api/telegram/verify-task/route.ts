@@ -64,6 +64,161 @@ export async function POST(request: Request) {
       isVerified = true;
       verificationMessage = 'Bot komutu kabul edildi';
     }
+    // Yeni görev tipleri
+    else if (taskType === 'car_purchase_nmfp') {
+      try {
+        // Kullanıcının NMFP ile araç satın alıp almadığını kontrol et
+        const { count, error } = await supabase
+          .from('user_cars')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('purchase_type', 'NMFP');
+          
+        if (error) throw error;
+        
+        console.log(`[verify-task] NMFP ile alınan araç sayısı:`, count);
+        isVerified = count > 0;
+        verificationMessage = isVerified 
+          ? 'NMFP ile araç satın alma görevi doğrulandı' 
+          : 'Henüz NMFP ile araç satın almamışsınız';
+      } catch (error: any) {
+        console.error('[verify-task] NMFP araç kontrolü hatası:', error);
+        verificationMessage = 'Araç kontrolü sırasında hata oluştu';
+      }
+    }
+    else if (taskType === 'car_purchase_ton') {
+      try {
+        const { count, error } = await supabase
+          .from('user_cars')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('purchase_type', 'TON');
+          
+        if (error) throw error;
+        
+        console.log(`[verify-task] TON ile alınan araç sayısı:`, count);
+        isVerified = count > 0;
+        verificationMessage = isVerified 
+          ? 'TON ile araç satın alma görevi doğrulandı' 
+          : 'Henüz TON ile araç satın almamışsınız';
+      } catch (error: any) {
+        console.error('[verify-task] TON araç kontrolü hatası:', error);
+        verificationMessage = 'Araç kontrolü sırasında hata oluştu';
+      }
+    }
+    else if (taskType === 'car_mint_nft') {
+      try {
+        const { count, error } = await supabase
+          .from('user_cars')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('purchase_type', 'NFT');
+          
+        if (error) throw error;
+        
+        console.log(`[verify-task] NFT mint edilen araç sayısı:`, count);
+        isVerified = count > 0;
+        verificationMessage = isVerified 
+          ? 'NFT mint görevi doğrulandı' 
+          : 'Henüz NFT mint yapmamışsınız';
+      } catch (error: any) {
+        console.error('[verify-task] NFT araç kontrolü hatası:', error);
+        verificationMessage = 'Araç kontrolü sırasında hata oluştu';
+      }
+    }
+    else if (taskType === 'car_repair') {
+      try {
+        const { count, error } = await supabase
+          .from('transactions')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('type', 'expense')
+          .like('item', 'Araç Tamiri%');
+          
+        if (error) throw error;
+        
+        console.log(`[verify-task] Yapılan araç tamiri sayısı:`, count);
+        isVerified = count > 0;
+        verificationMessage = isVerified 
+          ? 'Araç tamir görevi doğrulandı' 
+          : 'Henüz araç tamir etmemişsiniz';
+      } catch (error: any) {
+        console.error('[verify-task] Tamir kontrolü hatası:', error);
+        verificationMessage = 'Tamir kontrolü sırasında hata oluştu';
+      }
+    }
+    else if (taskType === 'car_refill') {
+      try {
+        const { count, error } = await supabase
+          .from('transactions')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('type', 'expense')
+          .like('item', 'Yakıt Dolumu%');
+          
+        if (error) throw error;
+        
+        console.log(`[verify-task] Yapılan yakıt dolumu sayısı:`, count);
+        isVerified = count > 0;
+        verificationMessage = isVerified 
+          ? 'Yakıt doldurma görevi doğrulandı' 
+          : 'Henüz yakıt doldurmamışsınız';
+      } catch (error: any) {
+        console.error('[verify-task] Yakıt kontrolü hatası:', error);
+        verificationMessage = 'Yakıt kontrolü sırasında hata oluştu';
+      }
+    }
+    else if (taskType === 'mining_complete') {
+      try {
+        // Görev bilgilerini al
+        const { data: taskData, error: taskError } = await supabase
+          .from('tasks')
+          .select('total')
+          .eq('id', taskId)
+          .single();
+          
+        if (taskError) throw taskError;
+        
+        const requiredCount = taskData?.total || 1;
+        
+        // Kullanıcının mining sayısını kontrol et
+        const { count, error } = await supabase
+          .from('mining_sessions')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', userId)
+          .eq('status', 'completed');
+          
+        if (error) throw error;
+        
+        console.log(`[verify-task] Tamamlanan mining sayısı: ${count}/${requiredCount}`);
+        isVerified = count >= requiredCount;
+        verificationMessage = isVerified 
+          ? `Mining görevi doğrulandı (${count}/${requiredCount})` 
+          : `Henüz yeterli mining tamamlanmadı (${count}/${requiredCount})`;
+      } catch (error: any) {
+        console.error('[verify-task] Mining kontrolü hatası:', error);
+        verificationMessage = 'Mining kontrolü sırasında hata oluştu';
+      }
+    }
+    else if (taskType === 'collect_bonus') {
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('last_bonus_collected_at')
+          .eq('id', userId)
+          .single();
+          
+        if (error) throw error;
+        
+        isVerified = data?.last_bonus_collected_at != null;
+        verificationMessage = isVerified 
+          ? 'Günlük bonus toplama görevi doğrulandı' 
+          : 'Henüz günlük bonus toplamamışsınız';
+      } catch (error: any) {
+        console.error('[verify-task] Bonus kontrolü hatası:', error);
+        verificationMessage = 'Bonus kontrolü sırasında hata oluştu';
+      }
+    }
     else {
       // Diğer görev tipleri veya tip belirtilmediyse otomatik onay
       isVerified = true;
