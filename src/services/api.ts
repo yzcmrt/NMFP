@@ -606,7 +606,7 @@ const taskService = {
 };
 
 // Kullanıcı API servisleri
-export const userService = {
+const userService = {
   // Kullanıcıyı getir veya oluştur
   getOrCreateUser: async (telegramId: string, username?: string | null, isPremium?: boolean, forceCreate: boolean = false): Promise<{ user: User | null, isNew: boolean }> => {
     try {
