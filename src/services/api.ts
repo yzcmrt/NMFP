@@ -64,7 +64,7 @@ const handleSupabaseError = (error: any, context: string = 'Supabase isteği') =
 };
 
 // Araç model API servisleri
-export const carModelService = {
+const carModelService = {
   // Tüm modelleri getir
   getAllModels: async (): Promise<CarModel[]> => {
     try {
@@ -107,7 +107,7 @@ export const carModelService = {
 };
 
 // Kullanıcı araçları API servisleri
-export const userCarService = {
+const userCarService = {
   // Kullanıcının tüm araçlarını getir (ilişkili model bilgisiyle)
   getUserCars: async (userId: string): Promise<UserCar[]> => {
     try {
@@ -242,7 +242,7 @@ export const userCarService = {
 };
 
 // İşlem API servisleri
-export const transactionService = {
+const transactionService = {
   // Kullanıcının tüm işlemlerini getir
   getUserTransactions: async (userId: string, limit: number = 10): Promise<Transaction[]> => {
     console.log(`[getUserTransactions] Kullanıcı ${userId} için son ${limit} işlem çekiliyor...`);
@@ -275,7 +275,7 @@ export const transactionService = {
 };
 
 // Garaj API servisleri
-export const garageService = {
+const garageService = {
   // Tüm garaj şablonlarını getir (garage_templates tablosundan)
   getGarageTemplates: async (): Promise<GarageTemplate[]> => {
     try {
@@ -386,7 +386,7 @@ export const garageService = {
 };
 
 // Mining API servisleri
-export const miningService = {
+const miningService = {
   // Kullanıcının aktif mining oturumunu getir (TEK)
   getActiveMiningSession: async (userId: string): Promise<MiningSession | null> => {
     try {
