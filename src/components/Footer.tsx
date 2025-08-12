@@ -52,15 +52,15 @@ const Footer = () => {
       <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#ff6bcb] to-[#c792ea] animate-gradientBg bg-[length:200%_auto]"></div>
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-          <div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-10 items-stretch">
+          <div className="h-full flex flex-col text-center">
             <h3 className="text-white text-lg font-bold mb-4">NMFP</h3>
             <p className="text-sm">
               Never Miss Free Points is a platform that rewards players for participating in Web3 activities.
             </p>
           </div>
-          
-          <div>
+
+          <div className="h-full flex flex-col text-center">
             <h3 className="text-white text-lg font-bold mb-4">Quick Links</h3>
             <ul className="space-y-2">
               <li>
@@ -90,14 +90,26 @@ const Footer = () => {
               </li>
             </ul>
           </div>
-          
-          <div>
+
+          <div className="h-full flex flex-col text-center">
             <h3 className="text-white text-lg font-bold mb-4">Connect With Us</h3>
-            <div className="flex space-x-4">
-              <a href="https://twitter.com" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
+            <div className="flex space-x-4 justify-center">
+              <a
+                href="https://x.com/NMFPorsche_Ton"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="X (Twitter)"
+                className="text-gray-300 hover:text-white transition-colors"
+              >
                 <FaTwitter size={24} />
               </a>
-              <a href="https://t.me" target="_blank" rel="noopener noreferrer" className="text-gray-300 hover:text-white transition-colors">
+              <a
+                href="https://t.me/needmoneyforporschewtf"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Telegram"
+                className="text-gray-300 hover:text-white transition-colors"
+              >
                 <FaTelegram size={24} />
               </a>
             </div>

@@ -1,7 +1,3 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /* Scrollbar gizleme sınıfı */
 .scrollbar-none {
   -ms-overflow-style: none;  /* IE ve Edge */
@@ -88,6 +84,55 @@
   background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: gradientBg 3s ease infinite;
+}
+
+/* Neon efektli başlık metni */
+.neon-text {
+  position: relative;
+  color: #fff;
+  text-shadow:
+    0 0 1px rgba(255,255,255,0.6),
+    0 0 2px rgba(255,255,255,0.6),
+    0 0 6px rgba(199,146,234,0.8),
+    0 0 12px rgba(199,146,234,0.7),
+    0 0 20px rgba(255,107,203,0.6);
+  animation: neonPulse 2.2s ease-in-out infinite, neonFlicker 7s linear infinite;
+  will-change: filter, opacity, text-shadow;
+}
+
+@keyframes neonPulse {
+  0%, 100% {
+    text-shadow:
+      0 0 1px rgba(255,255,255,0.6),
+      0 0 2px rgba(255,255,255,0.6),
+      0 0 6px rgba(199,146,234,0.8),
+      0 0 12px rgba(199,146,234,0.7),
+      0 0 20px rgba(255,107,203,0.6);
+    filter: saturate(1);
+  }
+  50% {
+    text-shadow:
+      0 0 2px rgba(255,255,255,0.9),
+      0 0 6px rgba(255,255,255,0.9),
+      0 0 14px rgba(199,146,234,0.95),
+      0 0 28px rgba(199,146,234,0.9),
+      0 0 44px rgba(255,107,203,0.85);
+    filter: saturate(1.15);
+  }
+}
+
+/* Neon flicker efekti - düzensiz aralıklarla kısa parlama/kısılma */
+@keyframes neonFlicker {
+  0%, 13%, 15%, 22%, 24%, 55%, 57%, 100% {
+    opacity: 1;
+    filter: none;
+  }
+  14% { opacity: 0.85; }
+  23% { opacity: 0.7; }
+  40% { opacity: 0.92; }
+  56% { opacity: 0.8; }
+  73% { opacity: 0.95; }
+  86% { opacity: 0.88; }
 }
 
 .web3-button {

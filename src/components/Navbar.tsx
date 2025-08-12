@@ -87,7 +87,7 @@ const Navbar = () => {
                 alt="NMFP Logo"
                 className="mr-2"
               />
-              NMFP
+              <span className="neon-text">NMFP</span>
             </Link>
           </div>
 
