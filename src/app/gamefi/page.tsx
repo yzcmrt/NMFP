@@ -100,8 +100,7 @@ export default function GameFiPage() {
       setActiveMiningSessions(activeSessions);
         setTransactions(recentTransactions);
         
-        // Kullanıcı verisini de tazeleyelim
-        await refreshUserData();
+        // refreshUserData kaldırıldı - realtime sistem otomatik güncelleme yapacak
         
       console.log('✅ fetchInitialData tamamlandı.');
     } catch (err: any) {
@@ -224,8 +223,7 @@ export default function GameFiPage() {
         // Araç ve garaj listelerini güncelle
         fetchInitialData(contextUser.id);
         
-        // Kullanıcı bakiyesini güncelle (bakım için ödeme yapıldıysa)
-        refreshUserData();
+        // refreshUserData kaldırıldı - realtime sistem otomatik güncelleme yapacak
           
         console.log('Mining toplu başlatma sonucu:', result);
       } else if (result && result.started_cars === 0) {

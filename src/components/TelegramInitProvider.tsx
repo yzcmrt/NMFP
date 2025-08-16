@@ -6,6 +6,7 @@ import { User } from '@/types';
 import { toast } from 'react-hot-toast';
 import { userService } from '@/services/api';
 import { supabase } from '@/lib/supabaseClient';
+import { formatCurrency } from '@/app/utils/formatters';
 
 const crypto = require('crypto-browserify');
 // Supabase istemcisini oluştur
@@ -134,6 +135,8 @@ export default function TelegramInitProvider({
   useEffect(() => {
     if (!user?.id) return;
 
+    console.log(`[TelegramInitProvider] Realtime aboneliği kuruluyor: users:${user.id}`);
+
     // Realtime kanal oluştur
     const channel = supabase
       .channel(`users:${user.id}`)
@@ -149,13 +152,17 @@ export default function TelegramInitProvider({
           
           // Yeni kullanıcı verisini state'e aktar
           if (payload.new) {
+            // Önceki balance değerini al
+            const previousBalance = user?.balance || 0;
+            const newBalance = payload.new.balance || 0;
+            
             // Tip güvenliği için tüm alanları açıkça belirt
             const updatedUser: User = {
               id: payload.new.id,
               telegram_id: payload.new.telegram_id,
               username: payload.new.username,
               wallet_address: payload.new.wallet_address,
-              balance: payload.new.balance || 0,
+              balance: newBalance,
               ton_coins: payload.new.ton_coins || '0',
               xp: payload.new.xp || 0,
               is_premium: Boolean(payload.new.is_premium),
@@ -165,17 +172,43 @@ export default function TelegramInitProvider({
               last_login: payload.new.last_login,
               created_at: payload.new.created_at,
               selected_car_id: payload.new.selected_car_id,
-              selected_garage_id: payload.new.selected_garage_id
+              selected_garage_id: payload.new.selected_garage_id,
+              premium_active: Boolean(payload.new.premium_active),
+              premium_until: payload.new.premium_until
             };
             
             setUser(updatedUser);
-            toast.success('Kullanıcı bilgileri güncellendi!');
+            
+            // Balance değişikliğinde bildirim göster
+            if (previousBalance !== newBalance) {
+              const difference = newBalance - previousBalance;
+              if (difference > 0) {
+                toast.success(`+${formatCurrency(difference)} NMFP kazandınız!`, {
+                  duration: 3000,
+                  icon: '💰'
+                });
+              } else if (difference < 0) {
+                toast(`${formatCurrency(Math.abs(difference))} NMFP harcandı`, {
+                  duration: 2000,
+                  icon: '💸'
+                });
+              }
+            }
           }
         }
       )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
           console.log(`[TelegramInitProvider] Realtime aboneliği başarılı: users:${user.id}`);
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error(`[TelegramInitProvider] Realtime kanal hatası:`, err);
+          // Realtime bağlantı hatası durumunda kullanıcıyı bilgilendir
+          toast.error('Canlı güncellemeler geçici olarak kesintiye uğradı', {
+            duration: 2000,
+            icon: '⚠️'
+          });
+        } else if (status === 'TIMED_OUT') {
+          console.warn(`[TelegramInitProvider] Realtime bağlantısı zaman aşımına uğradı`);
         } else {
           console.error(`[TelegramInitProvider] Realtime aboneliği hatası:`, status, err);
         }
@@ -183,8 +216,8 @@ export default function TelegramInitProvider({
 
     // Cleanup
     return () => {
+      console.log(`[TelegramInitProvider] Realtime aboneliği temizleniyor: users:${user.id}`);
       channel.unsubscribe();
-      console.log(`[TelegramInitProvider] Realtime aboneliği sonlandırıldı: users:${user.id}`);
     };
   }, [user?.id]); // Sadece user.id değiştiğinde çalışsın
 
