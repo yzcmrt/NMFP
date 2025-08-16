@@ -134,8 +134,20 @@ export default function TelegramInitProvider({
   useEffect(() => {
     if (!user?.id) return;
 
-    // Realtime kanal oluştur
-    const channel = supabase
+    let updateTimer: NodeJS.Timeout | null = null;
+    
+    // Debounced update fonksiyonu
+    const debouncedRefreshUserData = () => {
+      if (updateTimer) {
+        clearTimeout(updateTimer);
+      }
+      updateTimer = setTimeout(() => {
+        refreshUserData();
+      }, 1000); // 1 saniye debounce
+    };
+
+    // Users tablosu için realtime kanal
+    const userChannel = supabase
       .channel(`users:${user.id}`)
       .on('postgres_changes', 
         { 
@@ -175,16 +187,72 @@ export default function TelegramInitProvider({
       )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
-          console.log(`[TelegramInitProvider] Realtime aboneliği başarılı: users:${user.id}`);
+          console.log(`[TelegramInitProvider] Users realtime aboneliği başarılı: users:${user.id}`);
         } else {
-          console.error(`[TelegramInitProvider] Realtime aboneliği hatası:`, status, err);
+          console.error(`[TelegramInitProvider] Users realtime aboneliği hatası:`, status, err);
+        }
+      });
+
+    // Transactions tablosu için realtime kanal
+    const transactionChannel = supabase
+      .channel(`transactions:${user.id}`)
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'transactions', 
+          filter: `user_id=eq.${user.id}` 
+        }, 
+        (payload) => {
+          console.log('[TelegramInitProvider] Yeni transaction eklendi:', payload);
+          
+          // Transaction tiplerine göre mesaj göster
+          if (payload.new) {
+            const transaction = payload.new;
+            let message = '';
+            
+            switch (transaction.type) {
+              case 'reward':
+                message = `🎉 ${transaction.amount} NMFP kazandınız!`;
+                break;
+              case 'purchase':
+                message = `💰 ${transaction.amount} NMFP harcandı`;
+                break;
+              case 'deposit':
+                message = `💸 ${transaction.amount} NMFP yüklendi`;
+                break;
+              case 'withdraw':
+                message = `🏦 ${transaction.amount} NMFP çekildi`;
+                break;
+              default:
+                message = `💱 İşlem gerçekleşti: ${transaction.amount} NMFP`;
+            }
+            
+            if (message) {
+              toast.success(message, { duration: 3000 });
+            }
+            
+            // Kullanıcı verisini debounced olarak güncelle
+            debouncedRefreshUserData();
+          }
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`[TelegramInitProvider] Transactions realtime aboneliği başarılı: transactions:${user.id}`);
+        } else {
+          console.error(`[TelegramInitProvider] Transactions realtime aboneliği hatası:`, status, err);
         }
       });
 
     // Cleanup
     return () => {
-      channel.unsubscribe();
-      console.log(`[TelegramInitProvider] Realtime aboneliği sonlandırıldı: users:${user.id}`);
+      if (updateTimer) {
+        clearTimeout(updateTimer);
+      }
+      userChannel.unsubscribe();
+      transactionChannel.unsubscribe();
+      console.log(`[TelegramInitProvider] Realtime abonelikleri sonlandırıldı: users:${user.id}, transactions:${user.id}`);
     };
   }, [user?.id]); // Sadece user.id değiştiğinde çalışsın
 
