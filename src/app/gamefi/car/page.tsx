@@ -492,7 +492,7 @@ export default function CarPage() {
             // Refresh user cars list
             const updatedCars = await userCarService.getUserCars(user.id);
             setUserCars(updatedCars);
-            // selectedCar referansını kaldıralım - kullanılmıyor
+            // realtime sistem kullanıcı bakiyesini otomatik güncelleyecek
             setActiveTab('my-cars'); // Switch to my cars tab
         } else {
             throw new Error(`${purchaseType} ile araç satın alma işlemi başarısız oldu (RPC).`);
@@ -584,6 +584,7 @@ export default function CarPage() {
               // Araçları yenile
               const updatedCars = await userCarService.getUserCars(user.id);
               setUserCars(updatedCars);
+              // realtime sistem kullanıcı bakiyesini otomatik güncelleyecek
               // Mining oturumlarını yenile
               fetchMiningSessions();
                 } else {
@@ -612,6 +613,7 @@ export default function CarPage() {
               // Araçları yenile
               const updatedCars = await userCarService.getUserCars(user.id);
               setUserCars(updatedCars);
+              // realtime sistem kullanıcı bakiyesini otomatik güncelleyecek
               // Mining oturumlarını yenile
               fetchMiningSessions();
         } else {

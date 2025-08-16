@@ -209,8 +209,7 @@ export default function GaragePage() {
             const updatedGarages = await garageService.getUserGarages(user.id);
             setUserGarages(updatedGarages);
             setActiveTab('garages'); // Switch to my garages tab
-             // Refresh user data (context doesn't auto-refresh balance yet)
-             // Maybe trigger context refresh here if provider supports it
+             // realtime sistem kullanıcı bakiyesini otomatik güncelleyecek
         } else {
             throw new Error(`${template.purchase_type.toUpperCase()} ile garaj satın alma işlemi başarısız oldu (RPC).`);
         }
@@ -221,6 +220,33 @@ export default function GaragePage() {
       } finally {
       setPurchaseLoading(null);
       }
+  };
+
+  // Garaj bonuslarını toplama fonksiyonu
+  const handleCollectGarageBonuses = async () => {
+    if (!user || !user.id) {
+      toast.error('Bonus toplamak için kullanıcı bilgisi gerekli.');
+      return;
+    }
+
+    const toastId = toast.loading('Garaj bonusları toplanıyor...');
+    
+    try {
+      const totalBonus = await garageService.collectGarageBonuses(user.id);
+      
+      if (totalBonus > 0) {
+        toast.success(`${formatCurrency(totalBonus)} NMFP bonus toplandı!`, { 
+          id: toastId,
+          icon: '💰'
+        });
+        // realtime sistem kullanıcı bakiyesini otomatik güncelleyecek
+      } else {
+        toast.info('Toplanacak bonus bulunmuyor.', { id: toastId });
+      }
+    } catch (error: any) {
+      console.error('Garaj bonusu toplama hatası:', error);
+      toast.error(error.message || 'Bonus toplanırken hata oluştu.', { id: toastId });
+    }
   };
 
   // Helper to filter templates by purchase method
@@ -350,7 +376,10 @@ export default function GaragePage() {
                        <div className="w-3 h-3 rounded-full bg-yellow-500 animate-pulse mr-2"></div>
                        <span className="text-sm text-yellow-500">Bonus Bekleniyor</span>
                     </div>
-                    <button className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30">
+                    <button 
+                      onClick={handleCollectGarageBonuses}
+                      className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30"
+                    >
                       Bonusu Topla
                     </button>
                   </div>
