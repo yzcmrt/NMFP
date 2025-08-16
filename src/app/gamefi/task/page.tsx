@@ -141,7 +141,7 @@ export default function TaskPage() {
           : '';
         
         toast.success(`${result.message || 'Görev tamamlandı!'} ${rewardMsg}`, { id: toastId });
-        fetchTasks(); // Görevleri güncelle
+        fetchTasks(); // Görevleri güncelle - realtime sistem kullanıcı bakiyesini otomatik güncelleyecek
       } else {
         toast.error(result.message || 'Görev doğrulanamadı', { id: toastId });
       }
@@ -486,6 +486,37 @@ export default function TaskPage() {
         <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#7b2ff7] via-[#2f7bf7] to-[#2ff7c1] opacity-80"></div>
         <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">Görevler</h1>
       </div>
+      
+      {/* Kullanıcı Puan Bilgisi */}
+      {contextUser && (
+        <div className="bg-[#1a1a2e]/70 p-4 rounded-xl mb-5 shadow-md border border-[#2a3855]/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-[#16213e] rounded-full flex items-center justify-center">
+                <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#2ff7c1] to-[#7b2ff7]">
+                  {contextUser?.username?.charAt(0) || telegramUser?.first_name?.charAt(0) || '?'}
+                </span>
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">{contextUser?.username || telegramUser?.first_name || 'Oyuncu'}</h3>
+                <div className="flex items-center gap-1 text-sm text-gray-400">
+                  <span>Seviye {contextUser?.level || 1}</span>
+                  <span className="text-xs mx-1">•</span>
+                  <span>XP: {contextUser?.xp || 0}</span>
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xl font-bold text-[#2ff7c1]">
+                {formatCurrency(contextUser?.balance || 0)} NMFP
+              </div>
+              <div className="text-xs text-gray-400">
+                Güncel Bakiyeniz
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       
       <div className="space-y-5">
         <div className="flex justify-between bg-gradient-to-r from-[#1a1a2e] via-[#16213e] to-[#0f3460] rounded-xl p-1.5 shadow-lg border border-[#2a3855]">

@@ -58,7 +58,7 @@ export default function AutoMining() {
       if (apiResponse.data.success) {
         toast.success("Otomatik mining özelliği aktifleştirildi!", { id: toastId });
         setIsPurchased(true);
-        await refreshUserData();
+        // refreshUserData kaldırıldı - realtime sistem otomatik güncelleme yapacak
         return true;
       } else {
         const errorMessage = apiResponse.data.message || 'Bilinmeyen hata';
