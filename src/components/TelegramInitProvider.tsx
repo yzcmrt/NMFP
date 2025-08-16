@@ -136,19 +136,36 @@ export default function TelegramInitProvider({
     if (!user?.id) return;
 
     console.log(`[TelegramInitProvider] Realtime aboneliği kuruluyor: users:${user.id}`);
+    
+    // Debug: Call debug function in development
+    if (process.env.NODE_ENV === 'development') {
+      import('@/utils/realtimeTest').then(({ debugRealtimeIssues }) => {
+        debugRealtimeIssues();
+      });
+    }
 
     // Realtime kanal oluştur
     const channel = supabase
-      .channel(`users:${user.id}`)
+      .channel(`users:${user.id}`, {
+        config: {
+          broadcast: { self: true },
+          presence: { key: user.id }
+        }
+      })
       .on('postgres_changes', 
         { 
-          event: 'UPDATE', 
+          event: '*', // Tüm olayları dinle: INSERT, UPDATE, DELETE
           schema: 'public', 
           table: 'users', 
           filter: `id=eq.${user.id}` 
         }, 
         (payload) => {
-          console.log('[TelegramInitProvider] Kullanıcı verisi değişti:', payload);
+          console.log('[TelegramInitProvider] 🔄 Kullanıcı verisi değişti:', {
+            oldRecord: payload.old,
+            newRecord: payload.new,
+            eventType: payload.eventType,
+            timestamp: new Date().toISOString()
+          });
           
           // Yeni kullanıcı verisini state'e aktar
           if (payload.new) {
@@ -198,19 +215,29 @@ export default function TelegramInitProvider({
         }
       )
       .subscribe((status, err) => {
+        console.log(`[TelegramInitProvider] Realtime subscription status changed:`, { status, error: err, userId: user.id });
         if (status === 'SUBSCRIBED') {
-          console.log(`[TelegramInitProvider] Realtime aboneliği başarılı: users:${user.id}`);
+          console.log(`[TelegramInitProvider] ✅ Realtime aboneliği başarılı: users:${user.id}`);
+          toast.success('Canlı güncellemeler aktif', {
+            duration: 2000,
+            icon: '🔄'
+          });
         } else if (status === 'CHANNEL_ERROR') {
-          console.error(`[TelegramInitProvider] Realtime kanal hatası:`, err);
-          // Realtime bağlantı hatası durumunda kullanıcıyı bilgilendir
+          console.error(`[TelegramInitProvider] ❌ Realtime kanal hatası:`, err);
           toast.error('Canlı güncellemeler geçici olarak kesintiye uğradı', {
             duration: 2000,
             icon: '⚠️'
           });
         } else if (status === 'TIMED_OUT') {
-          console.warn(`[TelegramInitProvider] Realtime bağlantısı zaman aşımına uğradı`);
+          console.warn(`[TelegramInitProvider] ⏰ Realtime bağlantısı zaman aşımına uğradı`);
+          toast.warning('Bağlantı zaman aşımına uğradı, yeniden bağlanılıyor...', {
+            duration: 2000,
+            icon: '⏰'
+          });
+        } else if (status === 'CLOSED') {
+          console.log(`[TelegramInitProvider] 🔒 Realtime bağlantısı kapatıldı`);
         } else {
-          console.error(`[TelegramInitProvider] Realtime aboneliği hatası:`, status, err);
+          console.error(`[TelegramInitProvider] ❌ Realtime aboneliği hatası:`, status, err);
         }
       });
 

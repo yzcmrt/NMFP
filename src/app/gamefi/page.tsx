@@ -322,7 +322,7 @@ export default function GameFiPage() {
             </span>
           </div>
           
-          <div>
+          <div className="flex-1">
             <h2 className="text-xl font-bold text-white">{contextUser?.username || telegramUser?.first_name || 'Oyuncu'}</h2>
             <div className="flex items-center gap-1 text-sm text-gray-400">
               <span>Seviye {contextUser?.level || 1}</span>
@@ -333,6 +333,49 @@ export default function GameFiPage() {
               <span className="text-[#2ff7c1] font-medium">{formatCurrency(contextUser?.balance || 0)} NMFP</span>
             </div>
           </div>
+          
+          {/* Debug Realtime Test Buttons */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="flex gap-1">
+              <button
+                onClick={async () => {
+                  if (!contextUser?.id) return;
+                  const { testRealtimeConnection } = await import('@/utils/realtimeTest');
+                  await testRealtimeConnection(contextUser.id);
+                }}
+                className="bg-blue-500 text-white p-2 rounded text-xs"
+                title="Full Realtime Test"
+              >
+                🔍
+              </button>
+              <button
+                onClick={async () => {
+                  if (!contextUser?.id) return;
+                  console.log('[DEBUG] Manual balance update test başlıyor...');
+                  try {
+                    const { data, error } = await supabase
+                      .from('users')
+                      .update({ balance: (contextUser?.balance || 0) + 100 })
+                      .eq('id', contextUser.id);
+                    
+                    if (error) {
+                      console.error('[DEBUG] Manual update error:', error);
+                      toast.error('Test başarısız: ' + error.message);
+                    } else {
+                      console.log('[DEBUG] Manual update success:', data);
+                      toast.success('Test balance +100 eklendi');
+                    }
+                  } catch (err) {
+                    console.error('[DEBUG] Manual update catch:', err);
+                  }
+                }}
+                className="bg-red-500 text-white p-2 rounded text-xs"
+                title="Balance +100 Test"
+              >
+                🔧
+              </button>
+            </div>
+          )}
         </div>
       </div>
       

@@ -485,9 +485,22 @@ export default function CarPage() {
         toast.loading(`Sunucu ile ${purchaseType} işlemi doğrulanıyor...`, { id: toastId });
 
         // Call the RPC function AFTER potential TON transaction
+        console.log('[CarPage] 🚗 Araç satın alma başlıyor:', {
+          userId: user.id,
+          modelId: model.id,
+          purchaseType,
+          currentBalance: user.balance,
+          carPrice: purchasePrice
+        });
+        
         const newCarId = await userCarService.purchaseCar(user.id, model.id, purchaseType);
 
         if (newCarId !== null) {
+            console.log('[CarPage] ✅ Araç satın alma başarılı, realtime güncellemesi bekleniyor...', {
+              newCarId,
+              previousBalance: user.balance,
+              expectedNewBalance: user.balance - purchasePrice
+            });
             toast.success(`${model.name} (${purchaseType}) başarıyla satın alındı! ID: ${newCarId}`, { id: toastId });
             // Refresh user cars list
             const updatedCars = await userCarService.getUserCars(user.id);

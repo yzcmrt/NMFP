@@ -13,7 +13,16 @@ if (!supabaseKey) {
   // throw new Error("Supabase Anon Key eksik"); // Veya hata fırlat
 }
 
-// Tekil supabase istemcisi
-export const supabase = createClient<Database>(supabaseUrl!, supabaseKey!);
+// Tekil supabase istemcisi with realtime configuration
+export const supabase = createClient<Database>(supabaseUrl!, supabaseKey!, {
+  realtime: {
+    params: {
+      eventsPerSecond: 10
+    }
+  },
+  db: {
+    schema: 'public'
+  }
+});
 
-console.log('[SupabaseClient] Paylaşılan istemci başlatıldı.'); 
+console.log('[SupabaseClient] Paylaşılan istemci başlatıldı (realtime enabled).'); 

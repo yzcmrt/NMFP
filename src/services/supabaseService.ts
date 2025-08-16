@@ -211,12 +211,20 @@ export const carService = {
    * RPC kullanarak araç satın alır
    */
   async purchaseCar(userId: string, modelId: string, purchaseType: 'NMFP' | 'TON' | 'NFT'): Promise<number> {
+    console.log('[supabaseService] purchaseCar başlıyor:', { userId, modelId, purchaseType });
+    
     // SQL fonksiyonu UUID (TEXT) user_id ve UUID (TEXT) model_id bekliyor.
     const { data: newUserCarId, error } = await supabase.rpc('purchase_car', {
       p_user_id: userId,        // String UUID olarak gönder
       p_model_id: modelId,      // String UUID olarak gönder
       p_purchase_type: purchaseType,
     });
+
+    if (error) {
+      console.error('[supabaseService] purchaseCar RPC hatası:', error);
+    } else {
+      console.log('[supabaseService] purchaseCar RPC başarılı:', newUserCarId);
+    }
 
     handleSupabaseError(error, 'purchaseCar RPC');
 
@@ -226,6 +234,7 @@ export const carService = {
       throw new Error('Araç satın alınırken bir hata oluştu, geçersiz yanıt.');
     }
 
+    console.log('[supabaseService] purchaseCar tamamlandı, realtime güncellemesi bekleniyor...');
     return newUserCarId;
   },
 
