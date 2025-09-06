@@ -38,6 +38,11 @@ export default function GameFiPage() {
   const [activeMiningSessions, setActiveMiningSessions] = useState<MiningSession[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
+
+  // Local user state for balance updates
+  const [localUserBalance, setLocalUserBalance] = useState<number | null>(null);
+  const [localUserLevel, setLocalUserLevel] = useState<number | null>(null);
+  const [localUserXP, setLocalUserXP] = useState<number | null>(null);
   
   // Yeni state'ler
   const [isPreparingCars, setIsPreparingCars] = useState<boolean>(false);
@@ -111,6 +116,30 @@ export default function GameFiPage() {
         setDataLoading(false);
       }
   }, [refreshUserData]);
+
+  // Local user bilgilerini context'ten başlat
+  useEffect(() => {
+    if (contextUser) {
+      setLocalUserBalance(contextUser.balance);
+      setLocalUserLevel(contextUser.level);
+      setLocalUserXP(contextUser.xp);
+    }
+  }, [contextUser]);
+
+  // Balance güncelleme fonksiyonu
+  const updateLocalUserBalance = async (newBalance?: number) => {
+    if (newBalance !== undefined) {
+      setLocalUserBalance(newBalance);
+    } else {
+      // Context'ten güncel bilgiyi al
+      const updatedUser = await userService.getUserById(contextUser!.id);
+      if (updatedUser) {
+        setLocalUserBalance(updatedUser.balance);
+        setLocalUserLevel(updatedUser.level);
+        setLocalUserXP(updatedUser.xp);
+      }
+    }
+  };
 
   useEffect(() => {
     console.log('GameFiPage: contextUser durumu değişti:', contextUser);
@@ -327,12 +356,12 @@ export default function GameFiPage() {
           <div>
             <h2 className="text-xl font-bold text-white">{contextUser?.username || telegramUser?.first_name || 'Oyuncu'}</h2>
             <div className="flex items-center gap-1 text-sm text-gray-400">
-              <span>Seviye {contextUser?.level || 1}</span>
+              <span>Seviye {localUserLevel ?? contextUser?.level ?? 1}</span>
               <span className="text-xs mx-1">•</span>
-              <span>XP: {formatNumber(contextUser?.xp || 0)}</span>
+              <span>XP: {formatNumber(localUserXP ?? contextUser?.xp ?? 0)}</span>
             </div>
             <div className="mt-1">
-              <span className="text-[#2ff7c1] font-medium">{formatCurrency(contextUser?.balance || 0)} NMFP</span>
+              <span className="text-[#2ff7c1] font-medium">{formatCurrency(localUserBalance ?? contextUser?.balance ?? 0)} NMFP</span>
             </div>
           </div>
         </div>
@@ -341,10 +370,10 @@ export default function GameFiPage() {
       {/* Ana içerik alanı */}
       <div className="space-y-5">
         {/* Otomatik Mining Bileşeni */}
-        <AutoMining />
+        <AutoMining onBalanceUpdate={updateLocalUserBalance} />
         
         {/* Mevcut MiningArea Bileşeni */}
-        <MiningArea />
+        <MiningArea onBalanceUpdate={updateLocalUserBalance} />
         
         {/* Son İşlemler */}
         <div className="bg-[#1a1a2e]/70 p-4 rounded-xl shadow-md border border-[#2a3855]/50">

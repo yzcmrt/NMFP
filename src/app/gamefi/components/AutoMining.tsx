@@ -8,7 +8,11 @@ import { toNano } from '@ton/core';
 import { formatCurrency } from '@/app/utils/formatters';
 import axios from 'axios';
 
-export default function AutoMining() {
+interface AutoMiningProps {
+  onBalanceUpdate?: (newBalance?: number) => Promise<void>;
+}
+
+export default function AutoMining({ onBalanceUpdate }: AutoMiningProps) {
   const { user, refreshUserData } = useTelegram();
   const [tonConnectUI] = useTonConnectUI();
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -58,7 +62,12 @@ export default function AutoMining() {
       if (apiResponse.data.success) {
         toast.success("Otomatik mining özelliği aktifleştirildi!", { id: toastId });
         setIsPurchased(true);
-        await refreshUserData();
+
+        // Balance güncellemesi için parent component'i bilgilendir
+        if (onBalanceUpdate) {
+          await onBalanceUpdate();
+        }
+
         return true;
       } else {
         const errorMessage = apiResponse.data.message || 'Bilinmeyen hata';

@@ -494,6 +494,7 @@ export default function CarPage() {
             setUserCars(updatedCars);
             // selectedCar referansını kaldıralım - kullanılmıyor
             setActiveTab('my-cars'); // Switch to my cars tab
+
         } else {
             throw new Error(`${purchaseType} ile araç satın alma işlemi başarısız oldu (RPC).`);
         }
@@ -586,6 +587,7 @@ export default function CarPage() {
               setUserCars(updatedCars);
               // Mining oturumlarını yenile
               fetchMiningSessions();
+
                 } else {
               throw new Error('Tamir işlemi başarısız oldu.');
           }
@@ -614,12 +616,45 @@ export default function CarPage() {
               setUserCars(updatedCars);
               // Mining oturumlarını yenile
               fetchMiningSessions();
+
         } else {
               throw new Error('Yakıt doldurma işlemi başarısız oldu.');
           }
       } catch (error: any) {
           toast.error(error.message || 'Yakıt doldurma sırasında hata.', { id: toastId });
       }
+  };
+
+  // Mining tamamla fonksiyonu
+  const handleCompleteMining = async (sessionId: number) => {
+    if (!user || !user.id) {
+      toast.error('Mining tamamlamak için kullanıcı bilgisi gerekli.');
+      return;
+    }
+
+    try {
+      setIsMiningStarting(prev => ({...prev, [sessionId]: true}));
+
+      // Mining tamamla
+      const reward = await miningService.completeMining(sessionId);
+
+      if (reward > 0) {
+        toast.success(`Mining tamamlandı! ${formatNumber(reward)} NMFP kazandınız.`);
+
+        // Araç listesini güncelle
+        const updatedCars = await userCarService.getUserCars(user.id);
+        setUserCars(updatedCars);
+
+        // Mining oturumlarını yenile
+        fetchMiningSessions();
+
+      }
+    } catch (error: any) {
+      console.error('Mining tamamlama hatası:', error);
+      toast.error(error.message || 'Mining tamamlanırken bir hata oluştu.');
+    } finally {
+      setIsMiningStarting(prev => ({...prev, [sessionId]: false}));
+    }
   };
 
   // Tüm zamanlayıcıları temizle
@@ -982,20 +1017,44 @@ export default function CarPage() {
             
                       {/* Araç Kontrol Butonları - Her araç için göster */}
                       <div className="p-3 border-t border-[#2a3855]/30 flex flex-wrap gap-2">
-                        {/* Mining Başlat Butonu */}
-                        {car.status === CarStatus.ACTIVE && (
-                          <button
-                            onClick={() => handleStartMining(car.id)}
-                            disabled={car.fuel < 25 || car.condition < 10 || isMiningStarting[car.id]}
-                            className={`flex-1 py-2 text-xs rounded-lg font-medium transition-all duration-300 
-                              ${car.fuel < 25 || car.condition < 10 ? 
-                                'bg-[#1a1a2e] text-gray-500 cursor-not-allowed' : 
-                                'bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7] text-white hover:shadow-md hover:shadow-[#7b2ff7]/20'
-                              }`}
-                          >
-                            {isMiningStarting[car.id] ? 'Başlatılıyor...' : 'Mining Başlat'}
-                          </button>
-                        )}
+                        {/* Dinamik Mining Butonu */}
+                        <div className="flex-1">
+                          {/* Mining başlat butonu (araç hazırsa) */}
+                          {car.status === CarStatus.ACTIVE && (
+                            <button
+                              onClick={() => handleStartMining(car.id)}
+                              disabled={car.fuel < 25 || car.condition < 10 || isMiningStarting[car.id]}
+                              className={`w-full py-2 text-xs rounded-lg font-medium transition-all duration-300
+                                ${car.fuel < 25 || car.condition < 10 ?
+                                  'bg-[#1a1a2e] text-gray-500 cursor-not-allowed' :
+                                  'bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7] text-white hover:shadow-md hover:shadow-[#7b2ff7]/20'
+                                }`}
+                            >
+                              {isMiningStarting[car.id] ? 'Başlatılıyor...' : 'Mining Başlat'}
+                            </button>
+                          )}
+
+                          {/* Mining yapılıyor durumu */}
+                          {car.status === CarStatus.MINING && miningSession && miningSession.status === MiningStatus.ACTIVE && (
+                            <button
+                              disabled
+                              className="w-full bg-gradient-to-r from-[#7b2ff7] to-[#2f7bf7] text-white py-2 text-xs rounded-lg font-medium cursor-not-allowed opacity-75"
+                            >
+                              Mining Yapılıyor
+                            </button>
+                          )}
+
+                          {/* Claim butonu (mining tamamlanmışsa) */}
+                          {car.status === CarStatus.MINING && miningSession && miningSession.status === MiningStatus.COMPLETED && (
+                            <button
+                              onClick={() => handleCompleteMining ? handleCompleteMining(miningSession.id) : null}
+                              disabled={isMiningStarting[car.id]}
+                              className="w-full bg-gradient-to-r from-[#2ff7c1] to-[#5ff7d5] text-[#0d253f] py-2 text-xs rounded-lg font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#2ff7c1]/30"
+                            >
+                              {isMiningStarting[car.id] ? 'Ödül Alınıyor...' : 'Ödülü Topla'}
+                            </button>
+                          )}
+                        </div>
                         
                         {/* Yakıt Doldur Butonu */}
                         {car.status === CarStatus.ACTIVE && car.fuel < 100 && (
