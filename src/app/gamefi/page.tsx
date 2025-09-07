@@ -373,7 +373,7 @@ export default function GameFiPage() {
         <AutoMining onBalanceUpdate={updateLocalUserBalance} />
         
         {/* Mevcut MiningArea Bileşeni */}
-        <MiningArea onBalanceUpdate={updateLocalUserBalance} />
+        <MiningArea onBalanceUpdate={updateLocalUserBalance} currentBalance={localUserBalance} />
         
         {/* Son İşlemler */}
         <div className="bg-[#1a1a2e]/70 p-4 rounded-xl shadow-md border border-[#2a3855]/50">

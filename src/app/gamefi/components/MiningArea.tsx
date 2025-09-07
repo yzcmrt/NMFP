@@ -26,9 +26,10 @@ import {
 
 interface MiningAreaProps {
   onBalanceUpdate?: (newBalance?: number) => Promise<void>;
+  currentBalance?: number | null;
 }
 
-export default function MiningArea({ onBalanceUpdate }: MiningAreaProps) {
+export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAreaProps) {
   const { user, refreshUserData } = useTelegram();
   const [userCars, setUserCars] = useState<UserCar[]>([]);
   const [userGarages, setUserGarages] = useState<Garage[]>([]);
@@ -476,9 +477,11 @@ export default function MiningArea({ onBalanceUpdate }: MiningAreaProps) {
           setTotalFuelCost(0);
           
           toast.success('Araçlar başarıyla bakım yapıldı ve yakıt dolduruldu!', { id: toastId });
-          
-          // Kullanıcı bakiyesini güncelle
-          await refreshUserData();
+
+          // Kullanıcı bakiyesini güncelle (parent component için)
+          if (onBalanceUpdate) {
+            await onBalanceUpdate();
+          }
         }
       } else {
         toast.error('Hiçbir araç bakım ve yakıt doldurulamadı.', { id: toastId });
@@ -659,12 +662,14 @@ export default function MiningArea({ onBalanceUpdate }: MiningAreaProps) {
       
       if (success) {
         toast.success('Araç bakımı tamamlandı!', { id: toastId });
-        
-        // Araçları ve kullanıcı bakiyesini güncelle
-        await Promise.all([
-          fetchData(),
-          refreshUserData()
-        ]);
+
+        // Araçları güncelle
+        await fetchData();
+
+        // Parent component'e balance güncellemesi bildir
+        if (onBalanceUpdate) {
+          await onBalanceUpdate();
+        }
       } else {
         toast.error('Araç bakımı başarısız oldu.', { id: toastId });
       }
@@ -703,12 +708,14 @@ export default function MiningArea({ onBalanceUpdate }: MiningAreaProps) {
       
       if (success) {
         toast.success('Yakıt doldurma işlemi tamamlandı!', { id: toastId });
-        
-        // Araçları ve kullanıcı bakiyesini güncelle
-        await Promise.all([
-          fetchData(),
-          refreshUserData()
-        ]);
+
+        // Araçları güncelle
+        await fetchData();
+
+        // Parent component'e balance güncellemesi bildir
+        if (onBalanceUpdate) {
+          await onBalanceUpdate();
+        }
     } else {
         toast.error('Yakıt doldurma başarısız oldu.', { id: toastId });
       }
@@ -730,7 +737,7 @@ export default function MiningArea({ onBalanceUpdate }: MiningAreaProps) {
           </h3>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">Bakiye:</span>
-            <span className="text-sm font-medium text-[#2ff7c1]">{formatCurrency(user?.balance || 0)} NMFP</span>
+            <span className="text-sm font-medium text-[#2ff7c1]">{formatCurrency(currentBalance ?? user?.balance ?? 0)} NMFP</span>
           </div>
         </div>
         
