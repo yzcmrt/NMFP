@@ -209,8 +209,14 @@ export default function GaragePage() {
             const updatedGarages = await garageService.getUserGarages(user.id);
             setUserGarages(updatedGarages);
             setActiveTab('garages'); // Switch to my garages tab
-             // Refresh user data (context doesn't auto-refresh balance yet)
-             // Maybe trigger context refresh here if provider supports it
+
+            // Ana sayfaya navigation sonrası bakiye güncellemesi için localStorage trigger
+            localStorage.setItem('forceBalanceUpdate', Date.now().toString());
+
+            // Kısa bir gecikme sonrası ana sayfaya yönlendir (toast mesajının görünmesi için)
+            setTimeout(() => {
+                window.location.href = '/gamefi';
+            }, 1500);
         } else {
             throw new Error(`${template.purchase_type.toUpperCase()} ile garaj satın alma işlemi başarısız oldu (RPC).`);
         }

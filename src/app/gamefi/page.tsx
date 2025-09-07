@@ -165,13 +165,54 @@ export default function GameFiPage() {
       }
     };
 
+    // Sayfa odaklandığında da verileri yenile (daha güvenilir)
+    const handleFocus = () => {
+      if (contextUser?.id) {
+        console.log('Sayfa odaklandı, bakiye ve veriler kontrol ediliyor...');
+        // Sadece bakiye ve kullanıcı verilerini güncelle (performans için)
+        updateLocalUserBalance();
+        fetchInitialData(contextUser.id);
+      }
+    };
+
+    // LocalStorage trigger ile bakiye güncellemesi (satın alma sonrası için)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'forceBalanceUpdate' && contextUser?.id) {
+        console.log('Satın alma sonrası bakiye güncellemesi tetiklendi...');
+        // Force balance update
+        updateLocalUserBalance();
+        // Tüm verileri yenile
+        fetchInitialData(contextUser.id);
+        // Trigger'ı temizle
+        localStorage.removeItem('forceBalanceUpdate');
+      }
+    };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('storage', handleStorageChange);
+
+    // Sayfa yüklendiğinde localStorage trigger kontrolü
+    const checkInitialTrigger = () => {
+      const triggerValue = localStorage.getItem('forceBalanceUpdate');
+      if (triggerValue && contextUser?.id) {
+        console.log('Sayfa yüklenirken bakiye güncellemesi tetiklendi...');
+        updateLocalUserBalance();
+        fetchInitialData(contextUser.id);
+        localStorage.removeItem('forceBalanceUpdate');
+      }
+    };
+
+    // Sayfa yüklendiğinde kontrol et
+    setTimeout(checkInitialTrigger, 100);
+
     // Cleanup
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorageChange);
     };
-  }, [contextUser, fetchInitialData]);
+  }, [contextUser, fetchInitialData, updateLocalUserBalance]);
 
   // --- Dinamik Kalan Süre Hesaplama için useEffect ---
   useEffect(() => {
@@ -373,7 +414,10 @@ export default function GameFiPage() {
         <AutoMining onBalanceUpdate={updateLocalUserBalance} />
         
         {/* Mevcut MiningArea Bileşeni */}
-        <MiningArea onBalanceUpdate={updateLocalUserBalance} currentBalance={localUserBalance} />
+        <MiningArea
+          onBalanceUpdate={updateLocalUserBalance}
+          currentBalance={localUserBalance ?? contextUser?.balance ?? 0}
+        />
         
         {/* Son İşlemler */}
         <div className="bg-[#1a1a2e]/70 p-4 rounded-xl shadow-md border border-[#2a3855]/50">

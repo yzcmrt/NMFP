@@ -489,11 +489,20 @@ export default function CarPage() {
 
         if (newCarId !== null) {
             toast.success(`${model.name} (${purchaseType}) başarıyla satın alındı! ID: ${newCarId}`, { id: toastId });
+
             // Refresh user cars list
             const updatedCars = await userCarService.getUserCars(user.id);
             setUserCars(updatedCars);
             // selectedCar referansını kaldıralım - kullanılmıyor
             setActiveTab('my-cars'); // Switch to my cars tab
+
+            // Ana sayfaya navigation sonrası bakiye güncellemesi için localStorage trigger
+            localStorage.setItem('forceBalanceUpdate', Date.now().toString());
+
+            // Kısa bir gecikme sonrası ana sayfaya yönlendir (toast mesajının görünmesi için)
+            setTimeout(() => {
+                window.location.href = '/gamefi';
+            }, 1500);
 
         } else {
             throw new Error(`${purchaseType} ile araç satın alma işlemi başarısız oldu (RPC).`);
