@@ -34,6 +34,12 @@ import { supabase } from '@/lib/supabaseClient';
 import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
 // Import IPFS Service
 import { ipfsService as IPFSService } from '@/services/ipfsService';
+// Import dynamic mining button
+import DynamicMiningButton, { useMiningButtonState } from '@/components/DynamicMiningButton';
+// Import real-time mining progress
+import { useRealtimeMining } from '@/hooks/useRealtimeMining';
+// Import debug utilities
+import { debugMining, miningMetrics } from '@/utils/debugMining';
 
 // Nadir seviye sıralaması (UI için kalabilir)
 const rarityOrder = {
@@ -87,16 +93,50 @@ export default function CarPage() {
   
   // Mining oturumlarını takip etmek için gerekli state'ler
   const [activeMiningSessions, setActiveMiningSessions] = useState<MiningSession[]>([]);
-  const [timeLeft, setTimeLeft] = useState<{[key: number]: string}>({});
-  const [progress, setProgress] = useState<{[key: number]: number}>({});
-  const [timerRefs, setTimerRefs] = useState<{[key: number]: NodeJS.Timeout | null}>({});
   const [lastUpdateTime, setLastUpdateTime] = useState(0); // Son güncelleme zamanı için state
 
-  // Yerel mining oturumlarını saklamak için bir state
-  const [localMiningSessions, setLocalMiningSessions] = useState<{[key: number]: {endTime: number, startTime: number, status: string}}>({});
+  // Real-time mining progress tracking
+  const {
+    progressData: miningProgress,
+    isConnected: isMiningConnected,
+    refreshProgress
+  } = useRealtimeMining({
+    userId: user?.id || '',
+    sessions: activeMiningSessions,
+    onProgressUpdate: (sessionId, progress) => {
+      console.log(`[CarPage] Mining progress update: Session ${sessionId} - ${progress.progress}%`);
+    },
+    onSessionCompleted: (sessionId) => {
+      console.log(`[CarPage] Mining session ${sessionId} completed`);
+      // Session tamamlandı, UI'ı güncelle
+      setActiveMiningSessions(prev => 
+        prev.map(session => 
+          session.id === sessionId 
+            ? { ...session, status: MiningStatus.COMPLETED }
+            : session
+        )
+      );
+    }
+  });
 
-  // Yeni state ekliyoruz
-  const [shouldCleanup, setShouldCleanup] = useState(false);
+  // Backward compatibility için timeLeft ve progress helper'ları
+  const timeLeft: { [key: number]: string } = {};
+  const progress: { [key: number]: number } = {};
+  
+  Object.entries(miningProgress).forEach(([sessionId, progressInfo]) => {
+    const id = parseInt(sessionId);
+    timeLeft[id] = progressInfo.timeLeft || '--:--:--';
+    progress[id] = progressInfo.progress || 0;
+  });
+  
+  console.log('[CarPage] Mining progress data:', {
+    activeSessions: activeMiningSessions.length,
+    progressDataKeys: Object.keys(miningProgress),
+    timeLeftKeys: Object.keys(timeLeft),
+    progressKeys: Object.keys(progress)
+  });
+
+  // Simplified state management
 
   // Fetch user cars when user context is available
   useEffect(() => {
@@ -604,6 +644,10 @@ export default function CarPage() {
       return;
     }
     
+    // Debug mining state before start
+    debugMining.logCarMiningState(car, undefined);
+    miningMetrics.startMeasure('Start Mining');
+    
     // Araç uygun durumda mı kontrolü (Örn: Aktif, yakıtı/kondisyonu yeterli)
     if (car.status !== CarStatus.ACTIVE && car.status !== 'active') {
         toast.error('Bu araç şu anda mining için uygun değil (Durum: ' + car.status + ').');
@@ -626,15 +670,37 @@ export default function CarPage() {
       const newSessionId = await miningService.startMining(user.id, car.id, car.garage_id);
 
       if (newSessionId !== null) {
-        toast.success(`${car.name} ile mining başarıyla başlatıldı!`, { id: toastId });
+        console.log('[CarPage] Mining başarıyla başlatıldı, sessionId:', newSessionId);
         
-        // Araç listesi state'ini güncelle
+        // 1. Araç listesi state'ini hemen güncelle
         setUserCars(prevCars => prevCars.map(c => 
             c.id === car.id ? { ...c, status: CarStatus.MINING } : c
         ));
         
-        // Mining oturumlarını yenile
-        fetchMiningSessions();
+        // 2. Mining oturumlarını hemen fetch et ve güncelle
+        try {
+          const updatedSessions = await miningService.getAllActiveMiningSessions(user.id);
+          console.log('[CarPage] Fresh mining sessions after start:', updatedSessions);
+          setActiveMiningSessions(updatedSessions);
+          
+          // Yeni session'ı bul ve kontrol et
+          const newSession = updatedSessions.find(s => s.id === newSessionId);
+          if (newSession) {
+            console.log('[CarPage] New mining session found:', newSession);
+          } else {
+            console.warn('[CarPage] New mining session not found in updated list');
+          }
+          
+        } catch (fetchError) {
+          console.error('[CarPage] Mining session fetch error after start:', fetchError);
+          // Fallback: rate limit bypass
+          setLastUpdateTime(0);
+          setTimeout(async () => {
+            await fetchMiningSessions();
+          }, 500);
+        }
+        
+        toast.success(`${car.name} mining başlatıldı!`, { id: toastId });
       } else {
         // API null döndürdüyse (beklenmedik durum veya RPC'den gelen null)
         throw new Error('Mining oturumu başlatılamadı (API den null yanıt).');
@@ -796,7 +862,7 @@ export default function CarPage() {
 
     try {
       setIsMiningStarting(prev => ({...prev, [sessionId]: true}));
-      
+
       // Optimistic reward update
       addOptimisticTransaction({
         id: transactionId,
@@ -871,127 +937,16 @@ export default function CarPage() {
     }
   };
 
-  // Tüm zamanlayıcıları temizle
-  const clearAllTimers = useCallback(() => {
-    Object.entries(timerRefs).forEach(([sessionId, timer]) => {
-      if (timer) {
-        clearInterval(timer);
-      }
-    });
-    setTimerRefs({});
-  }, []);
+  // Simplified mining management - timer management artık useRealtimeMining hook'unda
 
-  // Mining oturumlarını ve zamanlayıcıları kur
-  const setupMiningTimers = useCallback((sessions: MiningSession[]) => {
-    // Temizlik için state kullan
-    setShouldCleanup(true);
-    
-    // Her session için yeni timer kur
-    const newTimerRefs: {[key: number]: NodeJS.Timeout | null} = {};
-    const newTimeLeft: {[key: number]: string} = {};
-    const newProgress: {[key: number]: number} = {};
-    const newLocalSessions: {[key: number]: {endTime: number, startTime: number, status: string}} = {};
-    
-    sessions.forEach(session => {
-      if (session.status === MiningStatus.ACTIVE) {
-        // Yerel oturum bilgilerini kaydet
-        newLocalSessions[session.id] = {
-          endTime: new Date(session.end_time).getTime(),
-          startTime: new Date(session.start_time).getTime(),
-          status: session.status
-        };
-        
-        const timer = setupTimer(
-          new Date(session.end_time),
-          (formattedTimeLeft, progressValue) => {
-            setTimeLeft(prev => ({...prev, [session.id]: formattedTimeLeft}));
-            setProgress(prev => ({...prev, [session.id]: progressValue}));
-          },
-          async () => {
-            console.log(`Mining tamamlandı: Session ID ${session.id}`);
-            // Yerel state'i güncelle, ekstra API çağrısı yapmak yerine
-            setLocalMiningSessions(prev => {
-              const updated = {...prev};
-              if (updated[session.id]) {
-                updated[session.id].status = MiningStatus.COMPLETED;
-              }
-              return updated;
-            });
-            
-            // Sadece minimum gerekli güncellemeleri yap
-            // Diğer API çağrılarını burada çağırmak yerine kullanıcı aksiyonu bekle
-            // Veya setInterval ile daha uzun aralıklarla yap
-          },
-          new Date(session.start_time)
-        );
-        
-        newTimerRefs[session.id] = timer;
-        
-        // İlk değerleri hesapla
-        const now = new Date();
-        const endTime = new Date(session.end_time);
-        const startTime = new Date(session.start_time);
-        
-        if (now >= endTime) {
-          newTimeLeft[session.id] = '00:00:00';
-          newProgress[session.id] = 100;
-        } else {
-          const totalDuration = endTime.getTime() - startTime.getTime();
-          const elapsed = now.getTime() - startTime.getTime();
-          const progressValue = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
-          
-          newTimeLeft[session.id] = formatTimeLeft(endTime.getTime() - now.getTime());
-          newProgress[session.id] = progressValue;
-        }
-      }
-    });
-    
-    // Önce clearAllTimers çağırmak yerine, shouldCleanup true olduğunda useEffect içinde çağrılacak
-    setTimerRefs(newTimerRefs);
-    setTimeLeft(newTimeLeft);
-    setProgress(newProgress);
-    setLocalMiningSessions(prev => ({...prev, ...newLocalSessions}));
-    
-    // Temizlik yapıldı
-    setShouldCleanup(false);
-  }, [shouldCleanup]);
-
-  // Temizlik için useEffect
-  useEffect(() => {
-    // shouldCleanup true olduğunda temizlik yap
-    if (shouldCleanup) {
-      clearAllTimers();
-    }
-  }, [shouldCleanup, clearAllTimers]);
-
-  // LocalStorage'dan mining oturumlarını yükle
-  useEffect(() => {
-    const savedSessions = localStorage.getItem('miningSessionsData');
-    if (savedSessions) {
-      try {
-        const parsedSessions = JSON.parse(savedSessions);
-        setLocalMiningSessions(parsedSessions);
-      } catch (e) {
-        console.error('Kaydedilen mining oturumları çözümlenemedi:', e);
-      }
-    }
-  }, []);
-
-  // LocalStorage'a mining oturumlarını kaydet
-  useEffect(() => {
-    if (Object.keys(localMiningSessions).length > 0) {
-      localStorage.setItem('miningSessionsData', JSON.stringify(localMiningSessions));
-    }
-  }, [localMiningSessions]);
-
-  // Aktif mining oturumlarını getir - artık daha az sıklıkta
+  // Aktif mining oturumlarını getir - simplified
   const fetchMiningSessions = useCallback(async () => {
     if (!user?.id) return;
     
     const now = Date.now();
-    // Son API çağrısından bu yana en az 60 saniye geçmiş mi kontrol et
-    if (now - lastUpdateTime < 60000) {
-      console.log('[CarPage] Son API çağrısından bu yana 60 saniye geçmedi, çağrı atlanıyor');
+    // Son API çağrısından bu yana en az 30 saniye geçmiş mi kontrol et
+    if (now - lastUpdateTime < 30000) {
+      console.log('[CarPage] Son API çağrısından bu yana 30 saniye geçmedi, çağrı atlanıyor');
       return;
     }
     
@@ -999,58 +954,44 @@ export default function CarPage() {
       const sessions = await miningService.getAllActiveMiningSessions(user.id);
       console.log('[CarPage] Mining oturumları:', sessions);
       setActiveMiningSessions(sessions);
-      setupMiningTimers(sessions);
       setLastUpdateTime(now);
     } catch (err) {
       console.error('[CarPage] Mining oturumları yüklenirken hata:', err);
     }
-  }, [user?.id, setupMiningTimers, lastUpdateTime]);
+  }, [user?.id, lastUpdateTime]);
 
   // Mining oturumlarını sayfa yüklendiğinde ve kullanıcı değiştiğinde getir
   useEffect(() => {
     if (user?.id && !isUserLoading) {
       fetchMiningSessions();
       
-      // Düzenli kontrol için 5 dakikalık interval
+      // Düzenli kontrol için 2 dakikalık interval
       const checkInterval = setInterval(() => {
         fetchMiningSessions();
-      }, 300000); // 5 dakika
+      }, 120000); // 2 dakika (daha sık kontrol)
       
       return () => {
         clearInterval(checkInterval);
-        // useEffect temizlik fonksiyonunda doğrudan callbackleri çağırmak yerine state kullan
-        setShouldCleanup(true);
       };
     }
   }, [user?.id, isUserLoading, fetchMiningSessions]);
 
-  // Araç mining'de mi kontrol et
-  const isCarMining = (carId: number) => {
-    // Aktif session'lardan kontrol et
-    const isActiveInSessions = activeMiningSessions.some(session => 
+  // Araç için mining oturumunu bul (active veya completed)
+  const getMiningSessionForCar = (carId: number): MiningSession | undefined => {
+    const session = activeMiningSessions.find(session => 
       session.car_id === carId && 
-      session.status === MiningStatus.ACTIVE
+      (session.status === MiningStatus.ACTIVE || session.status === MiningStatus.COMPLETED)
     );
     
-    // Eğer aktif session'larda yoksa, yerel state'ten kontrol et
-    if (!isActiveInSessions) {
-      // LocalSessions'da bu araç ID'sine sahip bir session var mı?
-      const carSessions = Object.entries(localMiningSessions).filter(([_, session]) => {
-        const associatedSession = activeMiningSessions.find(s => s.id === parseInt(_));
-        return associatedSession && associatedSession.car_id === carId && session.status === MiningStatus.ACTIVE;
+    if (process.env.NODE_ENV === 'development' && session) {
+      console.log(`[CarPage] Found mining session for car ${carId}:`, {
+        sessionId: session.id,
+        status: session.status,
+        carId: session.car_id
       });
-      
-      return carSessions.length > 0;
     }
     
-    return isActiveInSessions;
-  };
-
-  // Araç için mining oturumunu bul
-  const getMiningSessionForCar = (carId: number) => {
-    return activeMiningSessions.find(session => 
-      session.car_id === carId
-    );
+    return session;
   };
 
   // Yükleme durumu
@@ -1145,8 +1086,20 @@ export default function CarPage() {
                   }
                   
                   // Araç için mining oturumunu ve durumunu kontrol et
-                  const isCarMiningNow = isCarMining(car.id);
                   const miningSession = getMiningSessionForCar(car.id);
+                  const isCarMiningNow = !!miningSession;
+                  
+                  console.log(`[CarPage] Car ${car.id} (${car.name}) mining check:`, {
+                    carStatus: car.status,
+                    fuel: car.fuel,
+                    condition: car.condition,
+                    miningSession: miningSession ? {
+                      id: miningSession.id,
+                      status: miningSession.status,
+                      car_id: miningSession.car_id
+                    } : null,
+                    isCarMiningNow
+                  });
                   
                   return (
                     <div 
@@ -1159,11 +1112,22 @@ export default function CarPage() {
                           {/* Mining durumu için ek badge */}
                           {isCarMiningNow && miningSession && (
                             <div className="absolute top-2 right-2 z-10 bg-[#0f3460]/80 rounded-full px-2 py-1 text-xs flex items-center">
+                              {miningSession.status === MiningStatus.COMPLETED ? (
+                                <>
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1 text-[#2ff7c1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                  </svg>
+                                  <span className="text-[#2ff7c1] font-mono">Tamamlandı</span>
+                                </>
+                              ) : (
+                                <>
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1 animate-spin text-[#2ff7c1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                               </svg>
                               <span className="text-[#2ff7c1] font-mono">{timeLeft[miningSession.id] || '--:--:--'}</span>
+                                </>
+                              )}
                             </div>
                           )}
                           <Image
@@ -1219,7 +1183,7 @@ export default function CarPage() {
                               <div className="w-24 overflow-hidden">
                                 <div className="w-full h-1 bg-[#0d1423] rounded-full overflow-hidden mt-1">
                                   <div 
-                                    className="h-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7]"
+                                    className="h-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7] transition-all duration-300"
                                     style={{ width: `${progress[miningSession.id] || 0}%` }}
                                   ></div>
                           </div>
@@ -1233,41 +1197,41 @@ export default function CarPage() {
                       <div className="p-3 border-t border-[#2a3855]/30 flex flex-wrap gap-2">
                         {/* Dinamik Mining Butonu */}
                         <div className="flex-1">
-                          {/* Mining başlat butonu (araç hazırsa) */}
-                          {car.status === CarStatus.ACTIVE && (
-                            <button
-                              onClick={() => handleStartMining(car.id)}
-                              disabled={car.fuel < 25 || car.condition < 10 || isMiningStarting[car.id]}
-                              className={`w-full py-2 text-xs rounded-lg font-medium transition-all duration-300
-                                ${car.fuel < 25 || car.condition < 10 ?
-                                  'bg-[#1a1a2e] text-gray-500 cursor-not-allowed' :
-                                  'bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7] text-white hover:shadow-md hover:shadow-[#7b2ff7]/20'
-                                }`}
-                            >
-                              {isMiningStarting[car.id] ? 'Başlatılıyor...' : 'Mining Başlat'}
-                            </button>
-                          )}
-
-                          {/* Mining yapılıyor durumu */}
-                          {car.status === CarStatus.MINING && miningSession && miningSession.status === MiningStatus.ACTIVE && (
-                            <button
-                              disabled
-                              className="w-full bg-gradient-to-r from-[#7b2ff7] to-[#2f7bf7] text-white py-2 text-xs rounded-lg font-medium cursor-not-allowed opacity-75"
-                            >
-                              Mining Yapılıyor
-                            </button>
-                          )}
-
-                          {/* Claim butonu (mining tamamlanmışsa) */}
-                          {car.status === CarStatus.MINING && miningSession && miningSession.status === MiningStatus.COMPLETED && (
-                            <button
-                              onClick={() => handleCompleteMining ? handleCompleteMining(miningSession.id) : null}
-                              disabled={isMiningStarting[car.id]}
-                              className="w-full bg-gradient-to-r from-[#2ff7c1] to-[#5ff7d5] text-[#0d253f] py-2 text-xs rounded-lg font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#2ff7c1]/30"
-                            >
-                              {isMiningStarting[car.id] ? 'Ödül Alınıyor...' : 'Ödülü Topla'}
-                            </button>
-                          )}
+                          {(() => {
+                            // Real-time progress data'dan timeLeft ve progress al
+                            const sessionProgressData = miningSession ? miningProgress[miningSession.id] : null;
+                            const sessionTimeLeft = sessionProgressData?.timeLeft || timeLeft[miningSession?.id || -1] || '--:--:--';
+                            const sessionProgress = sessionProgressData?.progress || progress[miningSession?.id || -1] || 0;
+                            
+                            if (process.env.NODE_ENV === 'development') {
+                              console.log(`[CarPage] DynamicMiningButton props for car ${car.id}:`, {
+                                miningSession: miningSession?.id,
+                                sessionProgressData,
+                                timeLeft: sessionTimeLeft,
+                                progress: sessionProgress,
+                                carStatus: car.status,
+                                isLoading: isMiningStarting[car.id]
+                              });
+                              
+                              // Debug car mining state  
+                              debugMining.logCarMiningState(car, miningSession);
+                            }
+                            
+                            return (
+                              <DynamicMiningButton
+                                car={car}
+                                miningSession={miningSession}
+                                timeLeft={sessionTimeLeft}
+                                progress={sessionProgress}
+                                isLoading={isMiningStarting[car.id] || false}
+                                isClaimLoading={isMiningStarting[miningSession?.id || -1] || false}
+                                canStartMining={car.fuel >= 25 && car.condition >= 10} // Proper car condition check
+                                onStartMining={handleStartMining}
+                                onClaimReward={handleCompleteMining}
+                                size="sm"
+                              />
+                            );
+                          })()}
                         </div>
                         
                         {/* Yakıt Doldur Butonu */}
@@ -1292,49 +1256,6 @@ export default function CarPage() {
                           </button>
                         )}
                         
-                        {/* Araç Mining'de ise durum bilgisi */}
-                        {car.status === CarStatus.MINING && (
-                          <div className="w-full py-2 text-xs rounded-lg font-medium bg-[#1a1a2e]/70 text-[#2ff7c1] text-center flex flex-col items-center justify-center">
-                      <div className="flex items-center">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        </svg>
-                              <span>Mining Yapıyor</span>
-                    </div>
-                    
-                            {/* Kalan süre bilgisi */}
-                            {(() => {
-                              const session = getMiningSessionForCar(car.id);
-                              if (session && session.status === MiningStatus.ACTIVE) {
-                                return (
-                                  <div className="mt-1 flex flex-col">
-                                    <span className="font-mono text-[#2ff7c1]">
-                                      {timeLeft[session.id] || '--:--:--'}
-                                    </span>
-                                    <div className="w-full h-1.5 bg-[#0d1423] rounded-full overflow-hidden mt-1">
-                                      <div 
-                                        className="h-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7]"
-                                        style={{ width: `${progress[session.id] || 0}%` }}
-                                      ></div>
-                          </div>
-                          </div>
-                                );
-                              }
-                              return null;
-                            })()}
-                      </div>
-                      )}
-                        
-                        {/* Tamir edilme durumunda */}
-                        {car.status === CarStatus.REPAIRING && (
-                          <div className="w-full py-2 text-xs rounded-lg font-medium bg-[#1a1a2e]/70 text-yellow-500 text-center flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            Tamirde...
-                    </div>
-                        )}
                   </div>
                 </div>
                   );

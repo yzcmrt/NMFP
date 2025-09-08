@@ -37,6 +37,10 @@ export default function GamefiLayout({
     { href: '/gamefi/task', label: 'Task', icon: <TaskIcon /> },
     { href: '/gamefi/stats', label: 'Stats', icon: <ChartIcon /> },
     { href: '/gamefi/wallet', label: 'Wallet', icon: <WalletIcon /> },
+    // Debug sayfası (sadece development'ta)
+    ...(process.env.NODE_ENV === 'development' ? [
+      { href: '/gamefi/test-mining', label: '🧪', icon: <span className="text-xs">TEST</span> }
+    ] : [])
   ];
 
   return (
@@ -52,7 +56,7 @@ export default function GamefiLayout({
 
         {/* Alt navigasyon */}
         <nav className="bottom-nav">
-          <div className="grid grid-cols-6 h-full max-w-md mx-auto">
+          <div className={`grid ${navItems.length === 7 ? 'grid-cols-7' : 'grid-cols-6'} h-full max-w-md mx-auto`}>
             {navItems.map((item) => {
               // Daha güvenli isActive kontrolü
               let isActive = false;

@@ -3,10 +3,12 @@ import { MiningSession, MiningStatus } from '@/types';
 import { realtimeManager } from '@/libs/realtimeManager';
 import { miningService } from '@/services/api';
 
-interface MiningProgress {
+export interface MiningProgress {
   progress: number;
   timeLeft: string;
+  timeLeftMs: number;
   isCompleted: boolean;
+  sessionId?: number;
 }
 
 interface UseRealtimeMiningProps {
@@ -44,31 +46,50 @@ export function useRealtimeMining({
     const startTime = new Date(session.start_time).getTime();
     const endTime = new Date(session.end_time).getTime();
     
+    console.log(`[useRealtimeMining] Calculating progress for session ${session.id}:`, {
+      now: new Date(now).toISOString(),
+      startTime: new Date(startTime).toISOString(),
+      endTime: new Date(endTime).toISOString(),
+      sessionStatus: session.status
+    });
+    
     if (now >= endTime) {
       return {
         progress: 100,
         timeLeft: '00:00:00',
-        isCompleted: true
+        timeLeftMs: 0,
+        isCompleted: true,
+        sessionId: session.id
       };
     }
     
     if (now <= startTime) {
+      const timeLeftMs = endTime - now;
       return {
         progress: 0,
-        timeLeft: formatTimeLeft(endTime - now),
-        isCompleted: false
+        timeLeft: formatTimeLeft(timeLeftMs),
+        timeLeftMs,
+        isCompleted: false,
+        sessionId: session.id
       };
     }
     
     const totalDuration = endTime - startTime;
     const elapsed = now - startTime;
-    const progress = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
+    const progressPercent = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
+    const timeLeftMs = endTime - now;
     
-    return {
-      progress: Math.round(progress),
-      timeLeft: formatTimeLeft(endTime - now),
-      isCompleted: false
+    const result = {
+      progress: Math.round(progressPercent),
+      timeLeft: formatTimeLeft(timeLeftMs),
+      timeLeftMs,
+      isCompleted: false,
+      sessionId: session.id
     };
+    
+    console.log(`[useRealtimeMining] Session ${session.id} progress:`, result);
+    
+    return result;
   }, [formatTimeLeft]);
 
   // Update progress for all active sessions

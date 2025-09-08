@@ -25,6 +25,10 @@ import {
 } from '@/services/api'; // Yeni API servislerini kullanıyoruz
 // Import realtime balance
 import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
+// Import dynamic mining button
+import DynamicMiningButton, { useMiningButtonState } from '@/components/DynamicMiningButton';
+// Import realtime mining progress
+import { useRealtimeMining } from '@/hooks/useRealtimeMining';
 
 interface MiningAreaProps {
   onBalanceUpdate?: (newBalance?: number) => Promise<void>;
@@ -52,14 +56,45 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
   const [isLoading, setIsLoading] = useState(true);
   const [isClaimLoading, setIsClaimLoading] = useState<{[key: number]: boolean}>({});
   const [error, setError] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState<{[key: number]: string}>({});
-  const [progress, setProgress] = useState<{[key: number]: number}>({});
-  const [timerRefs, setTimerRefs] = useState<{[key: number]: NodeJS.Timeout | null}>({});
   const [totalMaintenanceCost, setTotalMaintenanceCost] = useState(0);
   const [totalFuelCost, setTotalFuelCost] = useState(0);
   const [totalEstimatedReward, setTotalEstimatedReward] = useState(0);
   const [totalMiningPower, setTotalMiningPower] = useState(0);
   const [availableGarageSlots, setAvailableGarageSlots] = useState(0);
+  
+  // Real-time mining progress tracking
+  const {
+    progressData: miningProgress,
+    isConnected: isMiningConnected,
+    refreshProgress
+  } = useRealtimeMining({
+    userId: user?.id || '',
+    sessions: activeMiningSessions,
+    onProgressUpdate: (sessionId, progressInfo) => {
+      console.log(`[MiningArea] Progress update: Session ${sessionId} - ${progressInfo.progress}%`);
+    },
+    onSessionCompleted: (sessionId) => {
+      console.log(`[MiningArea] Session ${sessionId} completed`);
+      // Session tamamlandı, state'i güncelle
+      setActiveMiningSessions(prev => 
+        prev.map(session => 
+          session.id === sessionId 
+            ? { ...session, status: MiningStatus.COMPLETED }
+            : session
+        )
+      );
+    }
+  });
+  
+  // Backward compatibility için timeLeft ve progress
+  const timeLeft: { [key: number]: string } = {};
+  const progress: { [key: number]: number } = {};
+  
+  Object.entries(miningProgress).forEach(([sessionId, progressInfo]) => {
+    const id = parseInt(sessionId);
+    timeLeft[id] = progressInfo.timeLeft || '--:--:--';
+    progress[id] = progressInfo.progress || 0;
+  });
 
   // Fonksiyonları önce tanımla
   // Toplam mining gücünü hesapla
@@ -98,100 +133,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
     setTotalFuelCost(fuel);
   }, []);
   
-  // Tüm zamanlayıcıları temizle
-  const clearAllTimers = useCallback(() => {
-    Object.entries(timerRefs).forEach(([sessionId, timer]) => {
-      if (timer) {
-        clearInterval(timer);
-      }
-    });
-    setTimerRefs({});
-  }, [timerRefs]);
-  
-  // Tüm zamanlayıcıları kur
-  const setupAllTimers = useCallback((sessions: MiningSession[]) => {
-    // Önce eski timerlari temizle
-    clearAllTimers();
-    
-    // Her session için yeni timer kur
-    const newTimerRefs: {[key: number]: NodeJS.Timeout | null} = {};
-    const newTimeLeft: {[key: number]: string} = {};
-    const newProgress: {[key: number]: number} = {};
-    
-    sessions.forEach(session => {
-      if (session.status === MiningStatus.ACTIVE) {
-        // LocalStorage'a session bilgilerini kaydet
-        localStorage.setItem(`miningSession_${session.id}`, JSON.stringify({
-          startTime: session.start_time,
-          endTime: session.end_time,
-          sessionId: session.id,
-          status: session.status
-        }));
-        
-        const timer = setupTimer(
-          new Date(session.end_time),
-          (formattedTimeLeft, progressValue) => {
-            setTimeLeft(prev => ({...prev, [session.id]: formattedTimeLeft}));
-            setProgress(prev => ({...prev, [session.id]: progressValue}));
-          },
-          async () => {
-            // Mining tamamlandı, oturumu güncelle
-            toast.success('Mining süresi doldu! Ödülünüzü toplamak için "Ödülü Topla" butonuna tıklayın.', {
-              duration: 4000,
-              position: 'top-center'
-            });
-
-            // Oturumu UI üzerinde tamamlanmış olarak işaretle
-            setActiveMiningSessions(prev => {
-              return prev.map(s => {
-                if (s.id === session.id) {
-                  return {...s, status: MiningStatus.COMPLETED};
-                }
-                return s;
-              });
-            });
-
-            // LocalStorage'daki durumu güncelle
-            const sessionData = localStorage.getItem(`miningSession_${session.id}`);
-            if (sessionData) {
-              const parsed = JSON.parse(sessionData);
-              localStorage.setItem(`miningSession_${session.id}`, JSON.stringify({
-                ...parsed,
-                status: MiningStatus.COMPLETED
-              }));
-            }
-
-            // Veriyi yenile (backend'deki durumu da güncellemek için)
-            await fetchData();
-          },
-          new Date(session.start_time)
-        );
-        
-        newTimerRefs[session.id] = timer;
-        
-        // İlk değerleri hesapla
-        const now = new Date();
-        const endTime = new Date(session.end_time);
-        const startTime = new Date(session.start_time);
-        
-        if (now >= endTime) {
-          newTimeLeft[session.id] = '00:00:00';
-          newProgress[session.id] = 100;
-        } else {
-          const totalDuration = endTime.getTime() - startTime.getTime();
-          const elapsed = now.getTime() - startTime.getTime();
-          const progressValue = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
-          
-          newTimeLeft[session.id] = formatTimeLeft(endTime.getTime() - now.getTime());
-          newProgress[session.id] = progressValue;
-        }
-      }
-    });
-    
-    setTimerRefs(newTimerRefs);
-    setTimeLeft(newTimeLeft);
-    setProgress(newProgress);
-  }, [clearAllTimers]);
+  // Timer management artık useRealtimeMining hook'unda - bu fonksiyonlar kaldırıldı
 
   // Verileri yeniden çek (mining durumlarını günceller)
   const fetchData = useCallback(async () => {
@@ -255,7 +197,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       if (sessions) {
         // Mining oturumlarını state'e kaydet
         setActiveMiningSessions(sessions);
-        setupAllTimers(sessions);
+        console.log('[MiningArea] Updated active mining sessions:', sessions.length);
       }
       
       // Eğer mining oturumları güncellendiyse kullanıcı verilerini de yenile
@@ -273,7 +215,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       } finally {
         setIsLoading(false);
     }
-  }, [user?.id, calculateTotalMiningPower, calculateTotalCosts, setupAllTimers, refreshUserData]);
+  }, [user?.id, calculateTotalMiningPower, calculateTotalCosts, refreshUserData]);
 
   // LocalStorage'dan oturumları kontrol et
   useEffect(() => {
@@ -361,13 +303,11 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       if (isMounted && !isLoading) fetchData();
     }, 60000); // 5000'den 60000'e değiştirildi (1 dakika)
     
-    // Component unmount olduğunda zamanlayıcıları temizle
+    // Component unmount olduğunda interval temizle
     return () => {
       isMounted = false;
       clearInterval(intervalId);
-      Object.values(timerRefs).forEach(timer => {
-        if (timer) clearInterval(timer);
-      });
+      // Timer management artık useRealtimeMining hook'unda
     };
   }, []);
   
@@ -396,15 +336,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
         description: `Mining ödülü: ${currentSession.user_car?.name || 'Araç'}`
       });
       
-      // Zamanlayıcıyı temizle
-      if (timerRefs[sessionId]) {
-        clearInterval(timerRefs[sessionId]!);
-        setTimerRefs(prev => {
-          const newTimerRefs = {...prev};
-          delete newTimerRefs[sessionId];
-          return newTimerRefs;
-        });
-      }
+      // Timer management artık useRealtimeMining hook'unda
 
       // LocalStorage'dan oturum bilgisini kaldır
       localStorage.removeItem(`miningSession_${sessionId}`);
@@ -654,23 +586,31 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
         toast.success('Mining başarıyla başlatıldı!', { id: toastId });
         console.log(`[DEBUG] Mining başarıyla başlatıldı - sessionId:${newSessionId}`);
 
-        // Mining başlatıldıktan sonra hemen miningSession'ı güncelle
+        // 1. Araç durumunu hemen local state'te güncelle
+        setUserCars(prev => prev.map(car => 
+          car.id === carId ? { ...car, status: CarStatus.MINING } : car
+        ));
+        
+        // 2. Mining session'ları hemen güncelle
         try {
           const sessions = await miningService.getAllActiveMiningSessions(user.id);
+          console.log('[MiningArea] Fresh mining sessions after start:', sessions);
           setActiveMiningSessions(sessions);
-          setupAllTimers(sessions);
 
-          // Araç durumunu da güncelle
+          // Araç durumunu server'dan da güncelle (async, blocking yapmaz)
+          setTimeout(async () => {
           const updatedCars = await userCarService.getUserCars(user.id);
           if (updatedCars) {
             setUserCars(updatedCars);
             calculateTotalMiningPower(updatedCars);
             calculateTotalCosts(updatedCars);
           }
+          }, 1000);
+          
         } catch (updateError) {
-          console.warn('[MiningArea] Mining başlatıldıktan sonra güncelleme hatası:', updateError);
-          // Yine de fetchData'yi çağır
-          await fetchData();
+          console.error('[MiningArea] Mining session fetch error after start:', updateError);
+          // Fallback: refresh data
+          setTimeout(() => fetchData(), 500);
         }
       } else {
         toast.error('Mining başlatılamadı.', { id: toastId });
@@ -784,7 +724,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
 
         // Araçları güncelle
         await fetchData();
-        
+
         // Real-time balance refresh
         await refreshBalance();
 
@@ -858,7 +798,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
 
         // Araçları güncelle
         await fetchData();
-        
+
         // Real-time balance refresh
         await refreshBalance();
 
@@ -1137,68 +1077,39 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
                       
                       {/* Sağ panel - Mining */}
                       <div className="w-full">
-                        {/* Dinamik Mining Butonu - Her durumda görünür */}
-                        <div className="space-y-2">
-                          {/* Mining başlat butonu (araç hazırsa) */}
-                          {car.status === CarStatus.ACTIVE && (
-                            <button
-                              onClick={() => startMining(car.id)}
-                              disabled={isLoading || availableGarageSlots <= 0 || car.fuel < 25 || car.condition < 10}
-                              className="w-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7] text-white py-2 px-4 rounded-lg font-medium transition-all duration-300 hover:shadow-lg disabled:opacity-50"
-                            >
-                              {isLoading ? 'İşleniyor...' : 'Mining Başlat'}
-                            </button>
-                          )}
-
-                          {/* Mining yapılıyor durumu */}
-                          {car.status === CarStatus.MINING && (
-                            <>
-                              {miningSession && miningSession.status === MiningStatus.ACTIVE ? (
-                                <>
-                                  <div className="bg-[#1a1a2e]/70 p-2 rounded-lg">
-                                    <div className="flex justify-between text-xs mb-1">
-                                      <span className="text-gray-400">Kalan Süre:</span>
-                                      <span className="font-mono text-[#2ff7c1]">{timeLeft[miningSession.id] || '--:--:--'}</span>
-                                    </div>
-                                    <div className="w-full h-2 bg-[#0d1423] rounded-full overflow-hidden">
-                                      <div
-                                        className="h-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7]"
-                                        style={{ width: `${progress[miningSession.id] || 0}%` }}
-                                      ></div>
-                                    </div>
-                                    <div className="text-xs text-center mt-1 text-[#2ff7c1]">
-                                      Beklenen Ödül: {formatCurrency(miningSession.expected_reward)} NMFP
-                                    </div>
-                                  </div>
-                                  <button
-                                    disabled
-                                    className="w-full bg-gradient-to-r from-[#7b2ff7] to-[#2f7bf7] text-white py-2 px-4 rounded-lg font-medium cursor-not-allowed opacity-75"
-                                  >
-                                    Mining Yapılıyor
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  disabled
-                                  className="w-full bg-gradient-to-r from-[#7b2ff7] to-[#2f7bf7] text-white py-2 px-4 rounded-lg font-medium cursor-not-allowed opacity-75"
-                                >
-                                  Mining Yapılıyor
-                                </button>
-                              )}
-                            </>
-                          )}
-
-                          {/* Claim butonu (mining tamamlanmışsa) */}
-                          {car.status === CarStatus.MINING && miningSession && miningSession.status === MiningStatus.COMPLETED && (
-                            <button
-                              onClick={() => completeMiningSession(miningSession.id)}
-                              disabled={isClaimLoading[miningSession.id]}
-                              className="w-full bg-gradient-to-r from-[#2ff7c1] to-[#5ff7d5] text-[#0d253f] py-2 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#2ff7c1]/30 disabled:opacity-50"
-                            >
-                              {isClaimLoading[miningSession.id] ? 'Ödül Alınıyor...' : 'Ödülü Topla'}
-                            </button>
-                          )}
-                        </div>
+                        {/* Dinamik Mining Butonu */}
+                        {(() => {
+                          // Real-time progress data'dan değerleri al
+                          const sessionProgressData = miningSession ? miningProgress[miningSession.id] : null;
+                          const sessionTimeLeft = sessionProgressData?.timeLeft || '--:--:--';
+                          const sessionProgress = sessionProgressData?.progress || 0;
+                          
+                          console.log(`[MiningArea] DynamicMiningButton props for car ${car.id}:`, {
+                            miningSession: miningSession?.id,
+                            sessionProgressData,
+                            timeLeft: sessionTimeLeft,
+                            progress: sessionProgress,
+                            availableSlots: availableGarageSlots,
+                            carStatus: car.status,
+                            carFuel: car.fuel,
+                            carCondition: car.condition
+                          });
+                          
+                          return (
+                            <DynamicMiningButton
+                              car={car}
+                              miningSession={miningSession}
+                              timeLeft={sessionTimeLeft}
+                              progress={sessionProgress}
+                              isLoading={isLoading}
+                              isClaimLoading={isClaimLoading[miningSession?.id || -1] || false}
+                              canStartMining={availableGarageSlots > 0 && car.fuel >= 25 && car.condition >= 10}
+                              onStartMining={startMining}
+                              onClaimReward={completeMiningSession}
+                              size="sm"
+                            />
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
