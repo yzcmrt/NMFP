@@ -529,17 +529,28 @@ const miningService = {
    // Mining tamamla (TEK OTURUM) - SQL fonksiyonu kullanarak
   completeMining: async (sessionId: number): Promise<number> => { // Kazanılan ödül miktarını (BIGINT) döndürür
       try {
+          console.log('[API] completeMining called with sessionId:', sessionId, 'type:', typeof sessionId);
+          
           const { data, error } = await supabase.rpc('complete_mining', {
               p_mining_session_id: sessionId
           });
-           if (error) throw error;
+          
+          console.log('[API] completeMining RPC response:', { data, error });
+          
+           if (error) {
+             console.error('[API] completeMining RPC error:', error);
+             throw error;
+           }
+           
           if (typeof data === 'number') {
+             console.log('[API] completeMining success, reward:', data);
              return data; // Kazanılan ödül
           } else {
-             console.warn('[completeMining] RPC beklenenden farklı bir tip döndürdü:', data);
+             console.warn('[API] completeMining RPC beklenenden farklı bir tip döndürdü:', data);
              return 0;
           }
       } catch (error) {
+          console.error('[API] completeMining caught error:', error);
           handleSupabaseError(error, 'completeMining');
           return 0;
       }

@@ -9,6 +9,7 @@ import { debugMining } from '@/utils/debugMining';
 import { formatCurrency } from '@/app/utils/formatters';
 import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
 import { useRealtimeMining } from '@/hooks/useRealtimeMining';
+import MiningErrorBoundary from '@/utils/errorBoundary';
 
 export default function TestMiningPage() {
   const { user } = useTelegram();
@@ -96,24 +97,39 @@ export default function TestMiningPage() {
     
     try {
       console.log('[TestMining] Claiming reward for session:', sessionId);
+      console.log('[TestMining] Before claim - session status check...');
+      
+      // Debug: Session durumunu kontrol et
+      const currentSessions = await miningService.getAllActiveMiningSessions(user.id);
+      const targetSession = currentSessions.find(s => s.id === sessionId);
+      console.log('[TestMining] Target session before claim:', targetSession);
+      
       const reward = await miningService.completeMining(sessionId);
+      console.log('[TestMining] completeMining API response:', reward);
       
       if (reward > 0) {
+        console.log('[TestMining] ✅ Reward claimed successfully:', reward);
+        
         // Update sessions
         const updatedSessions = await miningService.getAllActiveMiningSessions(user.id);
+        console.log('[TestMining] Updated sessions after claim:', updatedSessions.length);
         setActiveMiningSessions(updatedSessions);
         
         // Update cars
         const updatedCars = await userCarService.getUserCars(user.id);
+        console.log('[TestMining] Updated cars after claim:', updatedCars.length);
         setUserCars(updatedCars);
         
         // Refresh balance
         await refreshBalance();
         
-        console.log('[TestMining] Reward claimed successfully:', reward);
+      } else {
+        console.error('[TestMining] ❌ No reward received or reward = 0');
+        throw new Error(`Mining completion returned ${reward} reward`);
       }
     } catch (error) {
-      console.error('[TestMining] Claim reward error:', error);
+      console.error('[TestMining] ❌ Claim reward error:', error);
+      throw error; // Re-throw to see in UI
     } finally {
       setIsLoading(prev => ({ ...prev, [sessionId]: false }));
     }
@@ -128,13 +144,14 @@ export default function TestMiningPage() {
   }
 
   return (
-    <div className="pb-20 px-4">
-      {/* Header */}
-      <div className="mobile-app-header relative mb-6">
-        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white">
-          🧪 Mining Test
-        </h1>
-      </div>
+    <MiningErrorBoundary>
+      <div className="pb-20 px-4">
+        {/* Header */}
+        <div className="mobile-app-header relative mb-6">
+          <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white">
+            🧪 Mining Test
+          </h1>
+        </div>
 
       {/* Balance Display */}
       <div className="bg-[#1a1a2e]/70 p-4 rounded-xl mb-5 border border-[#2a3855]/50">
@@ -284,5 +301,6 @@ export default function TestMiningPage() {
         </div>
       )}
     </div>
+    </MiningErrorBoundary>
   );
 }

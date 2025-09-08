@@ -44,6 +44,8 @@ import { debugMining, miningMetrics } from '@/utils/debugMining';
 import { safePurchase, validateBalance, safeMiningClaim } from '@/utils/transactionSafety';
 // Import immediate sync
 import { useImmediateSync } from '@/hooks/useImmediateSync';
+// Import mining state sync
+import { useMiningStateSync } from '@/hooks/useMiningStateSync';
 
 // Nadir seviye sıralaması (UI için kalabilir)
 const rarityOrder = {
@@ -125,6 +127,16 @@ export default function CarPage() {
   
   // Immediate sync utilities
   const { syncMiningSession } = useImmediateSync();
+  
+  // Mining state sync (completed session cleanup)
+  const { forcSync: forceStatSync } = useMiningStateSync({
+    userId: user?.id || '',
+    sessions: activeMiningSessions,
+    onSessionsUpdated: (freshSessions) => {
+      console.log('[CarPage] State sync: Updating sessions from server');
+      setActiveMiningSessions(freshSessions);
+    }
+  });
   
   // Backward compatibility için timeLeft ve progress helper'ları
   const timeLeft: { [key: number]: string } = {};
@@ -928,16 +940,30 @@ export default function CarPage() {
         setUserCars(updatedCars);
 
         // Mining oturumlarını yenile
-        fetchMiningSessions();
+        setLastUpdateTime(0); // Rate limit bypass
+        await fetchMiningSessions();
         
         // Real-time balance refresh
         await refreshBalance();
+        
+        // Force state sync to clean up completed sessions
+        await forceStatSync();
 
-      } else {
+        } else {
         throw new Error('Mining ödülü alınamadı.');
       }
     } catch (error: any) {
-      console.error('Mining tamamlama hatası:', error);
+      console.error('[CarPage] Mining tamamlama hatası:', error);
+      console.error('[CarPage] Error details:', {
+        message: error.message,
+        stack: error.stack,
+        sessionId,
+        transactionId,
+        miningSession: miningSession ? {
+          id: miningSession.id,
+          status: miningSession.status
+        } : null
+      });
       
       // Rollback optimistic update
       rollbackTransaction(transactionId);

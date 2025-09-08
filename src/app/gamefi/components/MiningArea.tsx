@@ -31,6 +31,10 @@ import DynamicMiningButton, { useMiningButtonState } from '@/components/DynamicM
 import { useRealtimeMining } from '@/hooks/useRealtimeMining';
 // Import immediate sync
 import { useImmediateSync } from '@/hooks/useImmediateSync';
+// Import mining state sync
+import { useMiningStateSync } from '@/hooks/useMiningStateSync';
+// Import error boundary
+import MiningErrorBoundary from '@/utils/errorBoundary';
 
 interface MiningAreaProps {
   onBalanceUpdate?: (newBalance?: number) => Promise<void>;
@@ -90,6 +94,16 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
   
   // Immediate sync utilities
   const { syncMiningSession } = useImmediateSync();
+  
+  // Mining state sync (completed session cleanup)
+  const { syncWithServer, forcSync } = useMiningStateSync({
+    userId: user?.id || '',
+    sessions: activeMiningSessions,
+    onSessionsUpdated: (freshSessions) => {
+      console.log('[MiningArea] State sync: Updating sessions from server');
+      setActiveMiningSessions(freshSessions);
+    }
+  });
   
   // Backward compatibility için timeLeft ve progress
   const timeLeft: { [key: number]: string } = {};
@@ -319,18 +333,18 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
   const completeMiningSession = async (sessionId: number) => {
     if (!user?.id) return;
     
+    // Mining session bilgisini al
+    const currentSession = activeMiningSessions.find(s => s.id === sessionId);
+    if (!currentSession) {
+      toast.error('Mining oturumu bulunamadı!');
+      return;
+    }
+    
+    const expectedReward = currentSession.expected_reward;
+    const transactionId = `mining_claim_${sessionId}_${Date.now()}`; // Scope dışına taşındı
+    
     try {
       setIsClaimLoading(prev => ({...prev, [sessionId]: true}));
-      
-      // Mining session bilgisini al
-      const currentSession = activeMiningSessions.find(s => s.id === sessionId);
-      if (!currentSession) {
-        toast.error('Mining oturumu bulunamadı!');
-        return;
-      }
-      
-      const expectedReward = currentSession.expected_reward;
-      const transactionId = `mining_claim_${sessionId}_${Date.now()}`;
       
       // Optimistic reward update
       addOptimisticTransaction({
@@ -339,8 +353,6 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
         type: 'mining_reward',
         description: `Mining ödülü: ${currentSession.user_car?.name || 'Araç'}`
       });
-      
-      // Timer management artık useRealtimeMining hook'unda
 
       // LocalStorage'dan oturum bilgisini kaldır
       localStorage.removeItem(`miningSession_${sessionId}`);
@@ -353,7 +365,9 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       });
       
       // Mining tamamla
+      console.log('[MiningArea] Calling miningService.completeMining for session:', sessionId);
       const actualReward = await miningService.completeMining(sessionId);
+      console.log('[MiningArea] completeMining response:', actualReward);
       
       if (actualReward > 0) {
         // Transaction'ı commit et
@@ -410,11 +424,20 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
         // Tüm verileri yenile
         await fetchData();
         
+        // Force sync to clean up completed sessions
+        await forcSync();
+        
       } else {
         throw new Error('Mining ödülü alınamadı.');
       }
     } catch (err) {
       console.error('[MiningArea] Mining tamamlama hatası:', err);
+      console.error('[MiningArea] Error details:', {
+        message: err.message,
+        stack: err.stack,
+        sessionId,
+        transactionId: transactionId // Bu artık scope'da olmalı
+      });
       
       // Rollback optimistic transaction
       rollbackTransaction(transactionId);
@@ -844,6 +867,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
   };
 
   return (
+    <MiningErrorBoundary>
     <div className="space-y-4">
       {/* Bakım ve Yakıt Özeti */}
       <div className="bg-[#1a1a2e]/70 rounded-xl p-4 shadow-md border border-[#2a3855]/50">
@@ -1162,5 +1186,6 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
           </div>
       </div>
     </div>
+    </MiningErrorBoundary>
   );
 } 
