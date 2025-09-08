@@ -7,6 +7,8 @@ import { useTonConnectUI } from '@tonconnect/ui-react';
 import { toNano } from '@ton/core';
 import { formatCurrency } from '@/app/utils/formatters';
 import axios from 'axios';
+// Import realtime balance
+import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
 
 interface AutoMiningProps {
   onBalanceUpdate?: (newBalance?: number) => Promise<void>;
@@ -15,6 +17,19 @@ interface AutoMiningProps {
 export default function AutoMining({ onBalanceUpdate }: AutoMiningProps) {
   const { user, refreshUserData } = useTelegram();
   const [tonConnectUI] = useTonConnectUI();
+  
+  // Real-time balance management
+  const {
+    balance: realtimeBalance,
+    addOptimisticTransaction,
+    commitTransaction,
+    rollbackTransaction,
+    refreshBalance
+  } = useRealtimeBalance({
+    userId: user?.id || '',
+    initialBalance: user?.balance
+  });
+  
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isPurchased, setIsPurchased] = useState<boolean>(false);
   const [premiumEndsAt, setPremiumEndsAt] = useState<string | null>(null);

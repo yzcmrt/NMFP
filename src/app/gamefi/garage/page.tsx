@@ -14,6 +14,8 @@ import { Garage, User, GarageTemplate } from '@/types';
 import { garageService } from '@/services/api';
 // Import context hook
 import { useTelegram } from '@/components/TelegramInitProvider';
+// Import realtime balance management
+import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
 
 // Mock data is removed
 // const garages = [ ... ];
@@ -22,6 +24,23 @@ import { useTelegram } from '@/components/TelegramInitProvider';
 
 export default function GaragePage() {
   const { user, isLoading: isUserLoading, error: userError } = useTelegram(); // Get user from context
+
+  // Real-time balance management
+  const {
+    balance: realtimeBalance,
+    pendingAmount,
+    hasPending,
+    addOptimisticTransaction,
+    commitTransaction,
+    rollbackTransaction,
+    refreshBalance
+  } = useRealtimeBalance({
+    userId: user?.id || '',
+    initialBalance: user?.balance,
+    onBalanceChange: (newBalance, previousBalance) => {
+      console.log(`[GaragePage] Balance changed: ${previousBalance} → ${newBalance}`);
+    }
+  });
 
   const [activeTab, setActiveTab] = useState('garages');
   const [storeTab, setStoreTab] = useState('nmfp'); // 'nmfp' veya 'ton'
@@ -105,7 +124,17 @@ export default function GaragePage() {
 
     const loadingKey = `${purchaseType}-${template.id}`;
     setPurchaseLoading(loadingKey);
-    const toastId = toast.loading(`${purchaseType.toUpperCase()} ile ${template.name} satın alma işlemi başlatılıyor...`);
+    
+    // Transaction ID'si oluştur
+    const transactionId = `garage_purchase_${template.id}_${Date.now()}`;
+    
+    const toastId = toast.loading(`${template.name} satın alınıyor...`, {
+      style: {
+        background: 'rgba(26, 26, 46, 0.95)',
+        color: '#fff',
+        border: '1px solid rgba(42, 56, 85, 0.5)'
+      }
+    });
 
     try {
         let purchasePrice: number;
@@ -115,8 +144,18 @@ export default function GaragePage() {
         if (template.purchase_type === 'nmfp') {
             purchasePrice = template.price; // Use template.price
             currency = 'NMFP';
-            if (user.balance < purchasePrice) {
-                throw new Error(`Yetersiz ${currency}. Gerekli: ${formatCurrency(purchasePrice)}, Mevcut: ${formatCurrency(user.balance)}`);
+            
+            // NMFP ile garaj satın alma için optimistic update
+            addOptimisticTransaction({
+              id: transactionId,
+              amount: -purchasePrice,
+              type: 'garage_purchase',
+              description: `${template.name} garaj satın alındı`
+            });
+            
+            // Insufficient balance kontrolü (realtime balance ile)
+            if (realtimeBalance < purchasePrice) {
+                throw new Error(`Yetersiz ${currency}. Gerekli: ${formatCurrency(purchasePrice)}`);
             }
         } else if (template.purchase_type === 'ton') {
             purchasePrice = template.price; // Use template.price
@@ -204,26 +243,52 @@ export default function GaragePage() {
         const newGarageId = await garageService.purchaseGarage(user.id, template.id, template.purchase_type);
 
         if (newGarageId) {
-            toast.success(`${template.name} (${template.purchase_type.toUpperCase()}) başarıyla satın alındı!`, { id: toastId });
+            // Transaction başarılı - optimistic update'i commit et
+            commitTransaction(transactionId);
+            
+            toast.success(`${template.name} garaj başarıyla satın alındı!`, { 
+              id: toastId,
+              style: {
+                background: 'rgba(47, 247, 193, 0.1)',
+                color: '#2ff7c1',
+                border: '1px solid rgba(47, 247, 193, 0.3)'
+              }
+            });
+            
             // Refresh user garages list
             const updatedGarages = await garageService.getUserGarages(user.id);
             setUserGarages(updatedGarages);
             setActiveTab('garages'); // Switch to my garages tab
 
-            // Ana sayfaya navigation sonrası bakiye güncellemesi için localStorage trigger
-            localStorage.setItem('forceBalanceUpdate', Date.now().toString());
-
-            // Kısa bir gecikme sonrası ana sayfaya yönlendir (toast mesajının görünmesi için)
-            setTimeout(() => {
-                window.location.href = '/gamefi';
-            }, 1500);
+            // Real-time balance refresh (fallback)
+            await refreshBalance();
         } else {
-            throw new Error(`${template.purchase_type.toUpperCase()} ile garaj satın alma işlemi başarısız oldu (RPC).`);
+            throw new Error(`Garaj satın alma işlemi başarısız oldu.`);
         }
 
     } catch (error: any) {
       console.error(`${template.purchase_type} ile garaj satın alma hatası:`, error);
-      toast.error(error.message || `${template.purchase_type.toUpperCase()} ile garaj satın alma sırasında hata oluştu.`, { id: toastId });
+      
+      // Rollback optimistic transaction (NMFP için)
+      if (template.purchase_type === 'nmfp') {
+        rollbackTransaction(transactionId);
+      }
+      
+      let errorMessage = error.message || `Garaj satın alma sırasında hata oluştu.`;
+      
+      // Specific error handling  
+      if (errorMessage.includes('Yetersiz')) {
+        errorMessage = `Yetersiz ${template.purchase_type.toUpperCase()} bakiyesi. Gerekli: ${formatCurrency(template.price)}`;
+      }
+      
+      toast.error(errorMessage, { 
+        id: toastId,
+        style: {
+          background: 'rgba(239, 68, 68, 0.1)',
+          color: '#ef4444',
+          border: '1px solid rgba(239, 68, 68, 0.3)'
+        }
+      });
       } finally {
       setPurchaseLoading(null);
       }

@@ -23,6 +23,8 @@ import {
   miningService, 
   userService 
 } from '@/services/api'; // Yeni API servislerini kullanıyoruz
+// Import realtime balance
+import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
 
 interface MiningAreaProps {
   onBalanceUpdate?: (newBalance?: number) => Promise<void>;
@@ -31,6 +33,19 @@ interface MiningAreaProps {
 
 export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAreaProps) {
   const { user, refreshUserData } = useTelegram();
+  
+  // Real-time balance management
+  const {
+    balance: realtimeBalance,
+    addOptimisticTransaction,
+    commitTransaction,
+    rollbackTransaction,
+    refreshBalance
+  } = useRealtimeBalance({
+    userId: user?.id || '',
+    initialBalance: user?.balance
+  });
+  
   const [userCars, setUserCars] = useState<UserCar[]>([]);
   const [userGarages, setUserGarages] = useState<Garage[]>([]);
   const [activeMiningSessions, setActiveMiningSessions] = useState<MiningSession[]>([]);
@@ -363,6 +378,24 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
     try {
       setIsClaimLoading(prev => ({...prev, [sessionId]: true}));
       
+      // Mining session bilgisini al
+      const currentSession = activeMiningSessions.find(s => s.id === sessionId);
+      if (!currentSession) {
+        toast.error('Mining oturumu bulunamadı!');
+        return;
+      }
+      
+      const expectedReward = currentSession.expected_reward;
+      const transactionId = `mining_claim_${sessionId}_${Date.now()}`;
+      
+      // Optimistic reward update
+      addOptimisticTransaction({
+        id: transactionId,
+        amount: expectedReward,
+        type: 'mining_reward',
+        description: `Mining ödülü: ${currentSession.user_car?.name || 'Araç'}`
+      });
+      
       // Zamanlayıcıyı temizle
       if (timerRefs[sessionId]) {
         clearInterval(timerRefs[sessionId]!);
@@ -376,19 +409,33 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       // LocalStorage'dan oturum bilgisini kaldır
       localStorage.removeItem(`miningSession_${sessionId}`);
       
-      // Mining session ve car bilgisini al
-      const currentSession = activeMiningSessions.find(s => s.id === sessionId);
-      if (!currentSession) {
-        toast.error('Mining oturumu bulunamadı!');
-        return;
-      }
-      
-      const carId = currentSession.car_id;
+      const toastId = toast.loading('Mining ödülü toplanıyor...', {
+        style: {
+          background: 'rgba(26, 26, 46, 0.95)',
+          color: '#fff'
+        }
+      });
       
       // Mining tamamla
-      const reward = await miningService.completeMining(sessionId);
+      const actualReward = await miningService.completeMining(sessionId);
       
-      if (reward > 0) {
+      if (actualReward > 0) {
+        // Transaction'ı commit et
+        commitTransaction(transactionId);
+        
+        // Eğer beklenen ile gerçek reward farklıysa düzelt
+        if (actualReward !== expectedReward) {
+          const difference = actualReward - expectedReward;
+          if (difference !== 0) {
+            addOptimisticTransaction({
+              id: `mining_adjustment_${sessionId}`,
+              amount: difference,
+              type: 'mining_reward',
+              description: 'Mining ödül düzeltmesi'
+            });
+          }
+        }
+        
         // Oturumu tamamlanmış olarak işaretle
         setActiveMiningSessions(prev => {
           return prev.map(session => {
@@ -399,7 +446,14 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
           });
         });
         
-        toast.success(`Mining tamamlandı! ${formatNumber(reward)} NMFP kazandınız.`);
+        toast.success(`Mining tamamlandı! ${formatCurrency(actualReward)} NMFP kazandınız!`, { 
+          id: toastId,
+          style: {
+            background: 'rgba(47, 247, 193, 0.1)',
+            color: '#2ff7c1',
+            border: '1px solid rgba(47, 247, 193, 0.3)'
+          }
+        });
         
         // Araçları güncelle (yakıt ve durumları değişmiş olacak)
         const updatedCars = await userCarService.getUserCars(user.id);
@@ -409,7 +463,10 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
             calculateTotalCosts(updatedCars);
           }
         
-        // Kullanıcı bakiyesini güncelle (parent component için)
+        // Real-time balance refresh
+        await refreshBalance();
+        
+        // Parent component için callback (fallback)
         if (onBalanceUpdate) {
           await onBalanceUpdate();
         }
@@ -417,12 +474,21 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
         // Tüm verileri yenile
         await fetchData();
         
-        // Claim işlemi başarılı - araç durumu otomatik olarak ACTIVE'e dönecek
-        toast.success('Ödül başarıyla hesabınıza eklendi! Tekrar mining başlatabilirsiniz.');
+      } else {
+        throw new Error('Mining ödülü alınamadı.');
       }
     } catch (err) {
       console.error('[MiningArea] Mining tamamlama hatası:', err);
-      toast.error('Mining tamamlanırken bir hata oluştu.');
+      
+      // Rollback optimistic transaction
+      rollbackTransaction(transactionId);
+      
+      toast.error('Mining tamamlanırken bir hata oluştu.', {
+        style: {
+          background: 'rgba(239, 68, 68, 0.1)',
+          color: '#ef4444'
+        }
+      });
     } finally {
       setIsClaimLoading(prev => ({...prev, [sessionId]: false}));
     }
@@ -435,10 +501,23 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       return;
     }
     
-    if (user.balance < totalMaintenanceCost + totalFuelCost) {
-      toast.error('Yeterli bakiye yok!');
+    const totalCost = totalMaintenanceCost + totalFuelCost;
+    
+    if (realtimeBalance < totalCost) {
+      toast.error(`Yetersiz bakiye! Gerekli: ${formatCurrency(totalCost)} NMFP`);
       return;
     }
+    
+    // Transaction ID'si oluştur
+    const transactionId = `maintenance_all_${Date.now()}`;
+    
+    // Optimistic update
+    addOptimisticTransaction({
+      id: transactionId,
+      amount: -totalCost,
+      type: 'repair',
+      description: 'Tüm araç bakım ve yakıt'
+    });
     
     setIsLoading(true);
     const toastId = toast.loading('Tüm araçlar bakım ve yakıt dolduruluyor...');
@@ -468,6 +547,9 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       }
       
       if (successCount > 0) {
+        // Transaction'ı commit et
+        commitTransaction(transactionId);
+        
         // Araçları yeniden yükle
         const updatedCars = await userCarService.getUserCars(user.id);
         if (updatedCars) {
@@ -476,18 +558,34 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
           setTotalMaintenanceCost(0);
           setTotalFuelCost(0);
           
-          toast.success('Araçlar başarıyla bakım yapıldı ve yakıt dolduruldu!', { id: toastId });
+          toast.success('Araçlar başarıyla bakım yapıldı ve yakıt dolduruldu!', { 
+            id: toastId,
+            style: {
+              background: 'rgba(47, 247, 193, 0.1)',
+              color: '#2ff7c1',
+              border: '1px solid rgba(47, 247, 193, 0.3)'
+            }
+          });
 
-          // Kullanıcı bakiyesini güncelle (parent component için)
+          // Real-time balance refresh
+          await refreshBalance();
+          
+          // Parent callback (fallback)
           if (onBalanceUpdate) {
             await onBalanceUpdate();
           }
         }
       } else {
+        // Rollback transaction
+        rollbackTransaction(transactionId);
         toast.error('Hiçbir araç bakım ve yakıt doldurulamadı.', { id: toastId });
       }
     } catch (err) {
       console.error('[MiningArea] Toplu bakım hatası:', err);
+      
+      // Rollback transaction
+      rollbackTransaction(transactionId);
+      
       toast.error('Araçlara bakım yapılırken bir hata oluştu.', { id: toastId });
     } finally {
       setIsLoading(false);
@@ -649,8 +747,19 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
     }
     
     const repairCost = calculateMaintenanceCost(selectedCar.condition, 10);
-    if ((user?.balance || 0) < repairCost) {
-      toast.error('Yeterli bakiye yok!');
+    const transactionId = `repair_${carId}_${Date.now()}`;
+    
+    // Optimistic update
+    addOptimisticTransaction({
+      id: transactionId,
+      amount: -repairCost,
+      type: 'repair',
+      description: `${selectedCar.name} bakımı`
+    });
+    
+    if (realtimeBalance < repairCost) {
+      rollbackTransaction(transactionId);
+      toast.error(`Yetersiz bakiye! Gerekli: ${formatCurrency(repairCost)} NMFP`);
       return;
     }
     
@@ -661,20 +770,37 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       const success = await userCarService.repairCar(userId, carId);
       
       if (success) {
-        toast.success('Araç bakımı tamamlandı!', { id: toastId });
+        // Transaction'ı commit et
+        commitTransaction(transactionId);
+        
+        toast.success('Araç bakımı tamamlandı!', { 
+          id: toastId,
+          style: {
+            background: 'rgba(47, 247, 193, 0.1)',
+            color: '#2ff7c1',
+            border: '1px solid rgba(47, 247, 193, 0.3)'
+          }
+        });
 
         // Araçları güncelle
         await fetchData();
+        
+        // Real-time balance refresh
+        await refreshBalance();
 
-        // Parent component'e balance güncellemesi bildir
+        // Parent component'e balance güncellemesi bildir (fallback)
         if (onBalanceUpdate) {
           await onBalanceUpdate();
         }
       } else {
-        toast.error('Araç bakımı başarısız oldu.', { id: toastId });
+        throw new Error('Araç bakımı başarısız oldu.');
       }
     } catch (err) {
       console.error('[MiningArea] Araç bakım hatası:', err);
+      
+      // Rollback transaction
+      rollbackTransaction(transactionId);
+      
       toast.error('Araç bakımı sırasında bir hata oluştu.', { id: toastId });
     } finally {
       setIsLoading(false);
@@ -695,8 +821,19 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
     }
     
     const fuelCost = calculateFuelCost(selectedCar.fuel, 5);
-    if ((user?.balance || 0) < fuelCost) {
-      toast.error('Yeterli bakiye yok!');
+    const transactionId = `refill_${carId}_${Date.now()}`;
+    
+    // Optimistic update
+    addOptimisticTransaction({
+      id: transactionId,
+      amount: -fuelCost,
+      type: 'refill',
+      description: `${selectedCar.name} yakıt`
+    });
+    
+    if (realtimeBalance < fuelCost) {
+      rollbackTransaction(transactionId);
+      toast.error(`Yetersiz bakiye! Gerekli: ${formatCurrency(fuelCost)} NMFP`);
       return;
     }
     
@@ -707,20 +844,37 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       const success = await userCarService.refillCar(userId, carId);
       
       if (success) {
-        toast.success('Yakıt doldurma işlemi tamamlandı!', { id: toastId });
+        // Transaction'ı commit et
+        commitTransaction(transactionId);
+        
+        toast.success('Yakıt doldurma işlemi tamamlandı!', { 
+          id: toastId,
+          style: {
+            background: 'rgba(47, 247, 193, 0.1)',
+            color: '#2ff7c1',
+            border: '1px solid rgba(47, 247, 193, 0.3)'
+          }
+        });
 
         // Araçları güncelle
         await fetchData();
+        
+        // Real-time balance refresh
+        await refreshBalance();
 
-        // Parent component'e balance güncellemesi bildir
+        // Parent component'e balance güncellemesi bildir (fallback)
         if (onBalanceUpdate) {
           await onBalanceUpdate();
         }
     } else {
-        toast.error('Yakıt doldurma başarısız oldu.', { id: toastId });
+        throw new Error('Yakıt doldurma başarısız oldu.');
       }
     } catch (err) {
       console.error('[MiningArea] Yakıt doldurma hatası:', err);
+      
+      // Rollback transaction
+      rollbackTransaction(transactionId);
+      
       toast.error('Yakıt doldurma sırasında bir hata oluştu.', { id: toastId });
     } finally {
       setIsLoading(false);
@@ -737,7 +891,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
           </h3>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400">Bakiye:</span>
-            <span className="text-sm font-medium text-[#2ff7c1]">{formatCurrency(currentBalance ?? user?.balance ?? 0)} NMFP</span>
+            <span className="text-sm font-medium text-[#2ff7c1]">{formatCurrency(realtimeBalance)} NMFP</span>
           </div>
         </div>
         
@@ -755,7 +909,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
         {(totalMaintenanceCost > 0 || totalFuelCost > 0) && (
           <button
             onClick={maintainAllCars}
-            disabled={isLoading || (user?.balance || 0) < (totalMaintenanceCost + totalFuelCost)}
+            disabled={isLoading || realtimeBalance < (totalMaintenanceCost + totalFuelCost)}
             className="w-full bg-gradient-to-r from-orange-500 to-blue-500 text-white py-2 px-4 rounded-lg font-medium transition-all duration-300 disabled:opacity-50"
           >
             {isLoading ? 'İşleniyor...' : 'Tüm Araçları Bakım Yap'}
@@ -966,7 +1120,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
                       <div className="flex gap-2">
                         <button
                           onClick={() => repairSingleCar(user?.id || '', car.id)}
-                          disabled={isLoading || car.condition >= 100 || (user?.balance || 0) < calculateMaintenanceCost(car.condition, 10)}
+                          disabled={isLoading || car.condition >= 100 || realtimeBalance < calculateMaintenanceCost(car.condition, 10)}
                           className="w-full bg-gradient-to-r from-orange-500 to-yellow-500 text-white py-2 px-2 rounded-lg text-xs font-medium transition-all duration-300 hover:shadow-lg disabled:opacity-50"
                         >
                           Bakım ({formatCurrency(calculateMaintenanceCost(car.condition, 10))})
@@ -974,7 +1128,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
                         
                         <button
                           onClick={() => refillSingleCar(user?.id || '', car.id)}
-                          disabled={isLoading || car.fuel >= 100 || (user?.balance || 0) < calculateFuelCost(car.fuel, 5)}
+                          disabled={isLoading || car.fuel >= 100 || realtimeBalance < calculateFuelCost(car.fuel, 5)}
                           className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 text-white py-2 px-2 rounded-lg text-xs font-medium transition-all duration-300 hover:shadow-lg disabled:opacity-50"
                         >
                           Yakıt ({formatCurrency(calculateFuelCost(car.fuel, 5))})

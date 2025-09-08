@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
-import { formatCurrency } from '@/app/utils/formatters';
+import { formatCurrency, formatNumber } from '@/app/utils/formatters';
 import { 
   CarModel, 
   UserCar, 
@@ -30,6 +30,11 @@ import { toNano } from '@ton/core';
 import { useTelegram } from '@/components/TelegramInitProvider';
 import { supabase } from '@/lib/supabaseClient';
 
+// Import realtime balance management
+import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
+// Import IPFS Service
+import { ipfsService as IPFSService } from '@/services/ipfsService';
+
 // Nadir seviye sıralaması (UI için kalabilir)
 const rarityOrder = {
   [Rarity.COMMON]: 1,
@@ -51,6 +56,23 @@ import {
 
 export default function CarPage() {
   const { user, isLoading: isUserLoading, error: userError } = useTelegram(); // Get user from context
+
+  // Real-time balance management
+  const {
+    balance: realtimeBalance,
+    pendingAmount,
+    hasPending,
+    addOptimisticTransaction,
+    commitTransaction,
+    rollbackTransaction,
+    refreshBalance
+  } = useRealtimeBalance({
+    userId: user?.id || '',
+    initialBalance: user?.balance,
+    onBalanceChange: (newBalance, previousBalance) => {
+      console.log(`[CarPage] Balance changed: ${previousBalance} → ${newBalance}`);
+    }
+  });
 
   const [activeTab, setActiveTab] = useState('my-cars');
   const [userCars, setUserCars] = useState<UserCar[]>([]);
@@ -280,16 +302,39 @@ export default function CarPage() {
       
     const loadingKey = `${purchaseType}-${model.id}`;
     setPurchaseLoading(loadingKey);
-    const toastId = toast.loading(`${purchaseType} ile ${model.name} satın alma işlemi başlatılıyor...`);
+    
+    // Transaction ID'si oluştur
+    const transactionId = `purchase_${model.id}_${Date.now()}`;
+    
+    const toastId = toast.loading(`${model.name} satın alınıyor...`, {
+      style: {
+        background: 'rgba(26, 26, 46, 0.95)',
+        color: '#fff',
+        border: '1px solid rgba(42, 56, 85, 0.5)'
+      }
+    });
+
+    let purchasePrice: number = 0;
+    let currency: string = '';
 
     try {
-        let purchasePrice: number;
-        let currency: string;
-
         switch (purchaseType) {
             case 'NMFP':
                 purchasePrice = model.nmfp_price;
                 currency = 'NMFP';
+                
+                // NMFP satın almalar için optimistic update
+                addOptimisticTransaction({
+                  id: transactionId,
+                  amount: -purchasePrice,
+                  type: 'purchase',
+                  description: `${model.name} satın alındı (NMFP)`
+                });
+                
+                // Insufficient balance kontrolü (optimistic balance ile)
+                if (realtimeBalance < purchasePrice) {
+                  throw new Error('Yetersiz NMFP bakiyesi!');
+                }
                 break;
             case 'TON':
                 purchasePrice = model.ton_price;
@@ -408,13 +453,16 @@ export default function CarPage() {
                             const imageFileName = `car_${cleanModelName}.jpg`;
                             
                             // Görsel dosyasını NFT için oluştur
+                            if (!model.image_url) {
+                              throw new Error('Model görsel URL\'si bulunamadı');
+                            }
+                            
                             const imageFile = await fetch(model.image_url)
                                 .then(res => res.blob())
                                 .then(blob => new File([blob], imageFileName, { type: 'image/jpeg' }));
                             
                             // IPFS servisini yükleme işleminde standart tanımlayıcı ile kullan
-                            const ipfsService = new IPFSService();
-                            const imageCid = await ipfsService.uploadImage(imageFile, cleanModelName);
+                            const imageCid = await IPFSService.uploadImage(imageFile, cleanModelName);
                             
                             // Metadata oluştur - Standart format kullan
                             const metadata = {
@@ -428,25 +476,25 @@ export default function CarPage() {
                                     },
                                     {
                                         trait_type: "Model",
-                                        value: model.model || cleanModelName
+                                        value: model.name
                                     },
                                     {
-                                        trait_type: "Year",
-                                        value: model.year?.toString() || "2023"
+                                        trait_type: "Mining Power",
+                                        value: `${model.mining_power} NMFP/h`
                                     },
                                     {
-                                        trait_type: "Power",
-                                        value: `${model.power || 0} HP`
+                                        trait_type: "Max Fuel",
+                                        value: model.max_fuel.toString()
                                     },
                                     {
-                                        trait_type: "Speed",
-                                        value: `${model.speed || 0} km/h`
+                                        trait_type: "Max Health", 
+                                        value: model.max_health.toString()
                                     }
                                 ]
                             };
                             
                             // Metadata'yı IPFS'e standart adlandırma ile yükle (timestamp YOK)
-                            const metadataCid = await ipfsService.uploadMetadata(metadata);
+                            const metadataCid = await IPFSService.uploadMetadata(metadata);
                             
                             toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
                             
@@ -488,32 +536,57 @@ export default function CarPage() {
         const newCarId = await userCarService.purchaseCar(user.id, model.id, purchaseType);
 
         if (newCarId !== null) {
-            toast.success(`${model.name} (${purchaseType}) başarıyla satın alındı! ID: ${newCarId}`, { id: toastId });
+            // Transaction başarılı - optimistic update'i commit et
+            commitTransaction(transactionId);
+            
+            toast.success(`${model.name} başarıyla satın alındı!`, { 
+              id: toastId,
+              style: {
+                background: 'rgba(47, 247, 193, 0.1)',
+                color: '#2ff7c1',
+                border: '1px solid rgba(47, 247, 193, 0.3)'
+              }
+            });
 
             // Refresh user cars list
             const updatedCars = await userCarService.getUserCars(user.id);
             setUserCars(updatedCars);
-            // selectedCar referansını kaldıralım - kullanılmıyor
             setActiveTab('my-cars'); // Switch to my cars tab
 
-            // Ana sayfaya navigation sonrası bakiye güncellemesi için localStorage trigger
-            localStorage.setItem('forceBalanceUpdate', Date.now().toString());
-
-            // Kısa bir gecikme sonrası ana sayfaya yönlendir (toast mesajının görünmesi için)
-            setTimeout(() => {
-                window.location.href = '/gamefi';
-            }, 1500);
+            // Real-time balance refresh (fallback)
+            await refreshBalance();
 
         } else {
-            throw new Error(`${purchaseType} ile araç satın alma işlemi başarısız oldu (RPC).`);
+            throw new Error(`Araç satın alma işlemi başarısız oldu.`);
         }
 
     } catch (error: any) {
       console.error(`${purchaseType} ile satın alma hatası:`, error);
-      toast.error(error.message || `${purchaseType} ile satın alma sırasında hata oluştu.`, { id: toastId });
+      
+      // Rollback optimistic transaction
+      if (purchaseType === 'NMFP') {
+        rollbackTransaction(transactionId);
+      }
+      
+      let errorMessage = error.message || `${purchaseType} ile satın alma sırasında hata oluştu.`;
+      
+      // Specific error handling
+      if (errorMessage.includes('Yetersiz')) {
+        errorMessage = `Yetersiz ${currency} bakiyesi. Gerekli: ${formatCurrency(purchasePrice)}`;
+      } else if (errorMessage.includes('reject') || errorMessage.includes('cancel')) {
+        errorMessage = 'İşlem kullanıcı tarafından iptal edildi.';
+      }
+      
+      toast.error(errorMessage, { 
+        id: toastId,
+        style: {
+          background: 'rgba(239, 68, 68, 0.1)',
+          color: '#ef4444',
+          border: '1px solid rgba(239, 68, 68, 0.3)'
+        }
+      });
     } finally {
       setPurchaseLoading(null);
-      // toast.dismiss(toastId); // Keep success/error message
     }
   };
 
@@ -586,21 +659,56 @@ export default function CarPage() {
         return;
       }
       
+      // Repair cost hesapla
+      const repairCost = car.car_model?.repair_cost || 1000;
+      const transactionId = `repair_${carId}_${Date.now()}`;
+      
+      // Optimistic update
+      addOptimisticTransaction({
+        id: transactionId,
+        amount: -repairCost,
+        type: 'repair',
+        description: `${car.name} bakımı`
+      });
+      
+      // Insufficient balance kontrolü
+      if (realtimeBalance < repairCost) {
+        rollbackTransaction(transactionId);
+        toast.error(`Yetersiz bakiye! Gerekli: ${formatCurrency(repairCost)} NMFP`);
+        return;
+      }
+      
       const toastId = toast.loading(`${car.name} tamir ediliyor...`);
       try {
           const success = await userCarService.repairCar(user.id, car.id);
           if (success) {
-              toast.success(`${car.name} tamire alındı!`, { id: toastId });
+              // Transaction'ı commit et
+              commitTransaction(transactionId);
+              
+              toast.success(`${car.name} bakımı tamamlandı!`, { 
+                id: toastId,
+                style: {
+                  background: 'rgba(47, 247, 193, 0.1)',
+                  color: '#2ff7c1',
+                  border: '1px solid rgba(47, 247, 193, 0.3)'
+                }
+              });
+              
               // Araçları yenile
               const updatedCars = await userCarService.getUserCars(user.id);
               setUserCars(updatedCars);
               // Mining oturumlarını yenile
               fetchMiningSessions();
+              
+              // Real-time balance refresh
+              await refreshBalance();
 
                 } else {
               throw new Error('Tamir işlemi başarısız oldu.');
           }
       } catch (error: any) {
+          // Rollback transaction
+          rollbackTransaction(transactionId);
           toast.error(error.message || 'Tamir sırasında hata.', { id: toastId });
       }
   };
@@ -615,21 +723,56 @@ export default function CarPage() {
         return;
       }
       
+      // Refill cost hesapla
+      const refillCost = car.car_model?.refill_cost || 500;
+      const transactionId = `refill_${carId}_${Date.now()}`;
+      
+      // Optimistic update
+      addOptimisticTransaction({
+        id: transactionId,
+        amount: -refillCost,
+        type: 'refill',
+        description: `${car.name} yakıt`
+      });
+      
+      // Insufficient balance kontrolü
+      if (realtimeBalance < refillCost) {
+        rollbackTransaction(transactionId);
+        toast.error(`Yetersiz bakiye! Gerekli: ${formatCurrency(refillCost)} NMFP`);
+        return;
+      }
+      
       const toastId = toast.loading(`${car.name} yakıtı dolduruluyor...`);
       try {
           const success = await userCarService.refillCar(user.id, car.id);
           if (success) {
-              toast.success(`${car.name} yakıtı dolduruldu!`, { id: toastId });
+              // Transaction'ı commit et
+              commitTransaction(transactionId);
+              
+              toast.success(`${car.name} yakıtı dolduruldu!`, { 
+                id: toastId,
+                style: {
+                  background: 'rgba(47, 247, 193, 0.1)',
+                  color: '#2ff7c1',
+                  border: '1px solid rgba(47, 247, 193, 0.3)'
+                }
+              });
+              
               // Araçları yenile
               const updatedCars = await userCarService.getUserCars(user.id);
               setUserCars(updatedCars);
               // Mining oturumlarını yenile
               fetchMiningSessions();
+              
+              // Real-time balance refresh
+              await refreshBalance();
 
         } else {
               throw new Error('Yakıt doldurma işlemi başarısız oldu.');
           }
       } catch (error: any) {
+          // Rollback transaction
+          rollbackTransaction(transactionId);
           toast.error(error.message || 'Yakıt doldurma sırasında hata.', { id: toastId });
       }
   };
@@ -641,14 +784,62 @@ export default function CarPage() {
       return;
     }
 
+    // Mining session'ı bul
+    const miningSession = activeMiningSessions.find(s => s.id === sessionId);
+    if (!miningSession) {
+      toast.error('Mining oturumu bulunamadı.');
+      return;
+    }
+
+    const transactionId = `mining_reward_${sessionId}_${Date.now()}`;
+    const expectedReward = miningSession.expected_reward;
+
     try {
       setIsMiningStarting(prev => ({...prev, [sessionId]: true}));
+      
+      // Optimistic reward update
+      addOptimisticTransaction({
+        id: transactionId,
+        amount: expectedReward,
+        type: 'mining_reward',
+        description: `Mining ödülü: ${miningSession.user_car?.name || 'Araç'}`
+      });
+
+      const toastId = toast.loading('Mining ödülü toplanıyor...', {
+        style: {
+          background: 'rgba(26, 26, 46, 0.95)',
+          color: '#fff'
+        }
+      });
 
       // Mining tamamla
-      const reward = await miningService.completeMining(sessionId);
+      const actualReward = await miningService.completeMining(sessionId);
 
-      if (reward > 0) {
-        toast.success(`Mining tamamlandı! ${formatNumber(reward)} NMFP kazandınız.`);
+      if (actualReward > 0) {
+        // Transaction'ı commit et
+        commitTransaction(transactionId);
+        
+        // Eğer beklenen ile gerçek reward farklıysa düzelt
+        if (actualReward !== expectedReward) {
+          const difference = actualReward - expectedReward;
+          if (difference !== 0) {
+            addOptimisticTransaction({
+              id: `mining_adjustment_${sessionId}`,
+              amount: difference,
+              type: 'mining_reward',
+              description: `Mining ödül düzeltmesi`
+            });
+          }
+        }
+        
+        toast.success(`Mining tamamlandı! ${formatCurrency(actualReward)} NMFP kazandınız!`, { 
+          id: toastId,
+          style: {
+            background: 'rgba(47, 247, 193, 0.1)',
+            color: '#2ff7c1',
+            border: '1px solid rgba(47, 247, 193, 0.3)'
+          }
+        });
 
         // Araç listesini güncelle
         const updatedCars = await userCarService.getUserCars(user.id);
@@ -656,11 +847,25 @@ export default function CarPage() {
 
         // Mining oturumlarını yenile
         fetchMiningSessions();
+        
+        // Real-time balance refresh
+        await refreshBalance();
 
+      } else {
+        throw new Error('Mining ödülü alınamadı.');
       }
     } catch (error: any) {
       console.error('Mining tamamlama hatası:', error);
-      toast.error(error.message || 'Mining tamamlanırken bir hata oluştu.');
+      
+      // Rollback optimistic update
+      rollbackTransaction(transactionId);
+      
+      toast.error(error.message || 'Mining tamamlanırken bir hata oluştu.', {
+        style: {
+          background: 'rgba(239, 68, 68, 0.1)',
+          color: '#ef4444'
+        }
+      });
     } finally {
       setIsMiningStarting(prev => ({...prev, [sessionId]: false}));
     }

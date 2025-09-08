@@ -16,6 +16,8 @@ import {
 } from '@/services/api';
 import { User, UserCar, Garage, MiningSession, Transaction } from '@/types';
 import { toast } from 'react-hot-toast';
+// Import realtime balance management
+import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
 import { RealtimeChannel, REALTIME_SUBSCRIBE_STATES, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 
 // PrepareResult için geçici tip tanımı (idealde types/index.ts içine taşınmalı)
@@ -33,14 +35,30 @@ interface PrepareResult {
 
 export default function GameFiPage() {
   const { telegramUser, user: contextUser, isLoading: providerLoading, error: providerError, refreshUserData } = useTelegram();
+  
+  // Real-time balance management
+  const {
+    balance: realtimeBalance,
+    pendingAmount,
+    hasPending,
+    addOptimisticTransaction,
+    commitTransaction,
+    rollbackTransaction,
+    refreshBalance
+  } = useRealtimeBalance({
+    userId: contextUser?.id || '',
+    initialBalance: contextUser?.balance,
+    onBalanceChange: (newBalance, previousBalance) => {
+      console.log(`[GameFiPage] Balance real-time update: ${previousBalance} → ${newBalance}`);
+    }
+  });
+  
   const [userCars, setUserCars] = useState<UserCar[]>([]);
   const [garages, setGarages] = useState<Garage[]>([]);
   const [activeMiningSessions, setActiveMiningSessions] = useState<MiningSession[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
-  // Local user state for balance updates
-  const [localUserBalance, setLocalUserBalance] = useState<number | null>(null);
   const [localUserLevel, setLocalUserLevel] = useState<number | null>(null);
   const [localUserXP, setLocalUserXP] = useState<number | null>(null);
   
@@ -120,26 +138,10 @@ export default function GameFiPage() {
   // Local user bilgilerini context'ten başlat
   useEffect(() => {
     if (contextUser) {
-      setLocalUserBalance(contextUser.balance);
       setLocalUserLevel(contextUser.level);
       setLocalUserXP(contextUser.xp);
     }
   }, [contextUser]);
-
-  // Balance güncelleme fonksiyonu
-  const updateLocalUserBalance = async (newBalance?: number) => {
-    if (newBalance !== undefined) {
-      setLocalUserBalance(newBalance);
-    } else {
-      // Context'ten güncel bilgiyi al
-      const updatedUser = await userService.getUserById(contextUser!.id);
-      if (updatedUser) {
-        setLocalUserBalance(updatedUser.balance);
-        setLocalUserLevel(updatedUser.level);
-        setLocalUserXP(updatedUser.xp);
-      }
-    }
-  };
 
   useEffect(() => {
     console.log('GameFiPage: contextUser durumu değişti:', contextUser);
@@ -170,7 +172,7 @@ export default function GameFiPage() {
       if (contextUser?.id) {
         console.log('Sayfa odaklandı, bakiye ve veriler kontrol ediliyor...');
         // Sadece bakiye ve kullanıcı verilerini güncelle (performans için)
-        updateLocalUserBalance();
+        refreshBalance().catch(console.error);
         fetchInitialData(contextUser.id);
       }
     };
@@ -180,7 +182,7 @@ export default function GameFiPage() {
       if (e.key === 'forceBalanceUpdate' && contextUser?.id) {
         console.log('Satın alma sonrası bakiye güncellemesi tetiklendi...');
         // Force balance update
-        updateLocalUserBalance();
+        refreshBalance().catch(console.error);
         // Tüm verileri yenile
         fetchInitialData(contextUser.id);
         // Trigger'ı temizle
@@ -197,7 +199,7 @@ export default function GameFiPage() {
       const triggerValue = localStorage.getItem('forceBalanceUpdate');
       if (triggerValue && contextUser?.id) {
         console.log('Sayfa yüklenirken bakiye güncellemesi tetiklendi...');
-        updateLocalUserBalance();
+        refreshBalance().catch(console.error);
         fetchInitialData(contextUser.id);
         localStorage.removeItem('forceBalanceUpdate');
       }
@@ -212,7 +214,7 @@ export default function GameFiPage() {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, [contextUser, fetchInitialData, updateLocalUserBalance]);
+  }, [contextUser, fetchInitialData, refreshBalance]);
 
   // --- Dinamik Kalan Süre Hesaplama için useEffect ---
   useEffect(() => {
@@ -402,7 +404,15 @@ export default function GameFiPage() {
               <span>XP: {formatNumber(localUserXP ?? contextUser?.xp ?? 0)}</span>
             </div>
             <div className="mt-1">
-              <span className="text-[#2ff7c1] font-medium">{formatCurrency(localUserBalance ?? contextUser?.balance ?? 0)} NMFP</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[#2ff7c1] font-medium">{formatCurrency(realtimeBalance)} NMFP</span>
+                {hasPending && (
+                  <span className="text-xs text-orange-400 bg-orange-400/10 px-2 py-1 rounded-full flex items-center">
+                    <div className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-pulse mr-1"></div>
+                    {pendingAmount > 0 ? '+' : ''}{formatCurrency(Math.abs(pendingAmount))} beklemede
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -411,12 +421,12 @@ export default function GameFiPage() {
       {/* Ana içerik alanı */}
       <div className="space-y-5">
         {/* Otomatik Mining Bileşeni */}
-        <AutoMining onBalanceUpdate={updateLocalUserBalance} />
+        <AutoMining onBalanceUpdate={refreshBalance} />
         
         {/* Mevcut MiningArea Bileşeni */}
         <MiningArea
-          onBalanceUpdate={updateLocalUserBalance}
-          currentBalance={localUserBalance ?? contextUser?.balance ?? 0}
+          onBalanceUpdate={refreshBalance}
+          currentBalance={realtimeBalance}
         />
         
         {/* Son İşlemler */}
