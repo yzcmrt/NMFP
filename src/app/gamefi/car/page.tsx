@@ -912,7 +912,9 @@ export default function CarPage() {
         // Frontend state'i temizle
         setActiveMiningSessions(prev => prev.filter(s => s.id !== sessionId));
         
-        toast.success('Bu mining session zaten tamamlanmış! Durum güncellendi.', {
+        // Backend'te otomatik tamamlandıysa, reward zaten eklenmiştir
+        // Sadece başarı mesajı göster ve balance'ı güncelle
+        toast.success('Mining ödülünüz otomatik olarak eklendi! 🎉', {
           style: {
             background: 'rgba(47, 247, 193, 0.1)',
             color: '#2ff7c1',
@@ -920,8 +922,12 @@ export default function CarPage() {
           }
         });
         
-        // Force balance refresh
+        // Force balance refresh to show the auto-added reward
         await refreshBalance();
+        
+        // Araçları güncelle
+        const updatedCars = await userCarService.getUserCars(user.id);
+        setUserCars(updatedCars);
         
         return; // Exit early
       }

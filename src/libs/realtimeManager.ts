@@ -146,8 +146,17 @@ export class RealtimeManager {
             table: 'mining_sessions',
             filter: `user_id=eq.${userId}`
           },
-          (payload) => {
+          async (payload) => {
             this.handleMiningUpdate(userId, payload);
+            
+            // Eğer session completed olmuşsa, balance da güncellenmiş olabilir
+            if (payload.new?.status === 'completed' && payload.old?.status === 'active') {
+              console.log('[RealtimeManager] Mining auto-completed via backend, refreshing balance...');
+              // Balance refresh'i trigger et
+              setTimeout(() => {
+                this.refreshUserBalance(userId).catch(console.error);
+              }, 1000); // Backend transaction'ın tamamlanması için küçük bir gecikme
+            }
           }
         )
         .on('broadcast', { event: 'batch_mining_progress' }, (payload) => {

@@ -257,6 +257,11 @@ export default function DynamicMiningButton({
           disabled: false,
           onClick: () => {
             if (miningSession) {
+              console.log('[DynamicMiningButton] Claiming reward for session:', {
+                sessionId: miningSession.id,
+                expectedReward: miningSession.expected_reward,
+                carName: car.name
+              });
               onClaimReward(miningSession.id);
             }
           }
