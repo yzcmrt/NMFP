@@ -211,17 +211,18 @@ export default function DynamicMiningButton({
               </div>
               <div className="w-full mt-2">
                 <div className="flex justify-between text-xs mb-1">
-                  <span>Kalan Süre:</span>
-                  <span className="font-mono text-[#2ff7c1]">{timeLeft}</span>
+                  <span className="text-gray-400">Kalan Süre:</span>
+                  <span className="font-mono text-[#2ff7c1] font-medium">{timeLeft}</span>
                 </div>
-                <div className={`w-full bg-[#0d1423] rounded-full overflow-hidden ${sizeClasses.progress}`}>
+                <div className={`w-full bg-[#0d1423] rounded-full overflow-hidden ${sizeClasses.progress} mb-1`}>
                   <div
                     className="h-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7] transition-all duration-300"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <div className="text-xs text-center mt-1 text-[#2ff7c1]">
-                  Beklenen Ödül: {formatCurrency(miningSession?.expected_reward || 0)} NMFP
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">İlerleme: {progress}%</span>
+                  <span className="text-[#2ff7c1] font-medium">Ödül: {formatCurrency(miningSession?.expected_reward || 0)}</span>
                 </div>
               </div>
             </div>
@@ -235,14 +236,24 @@ export default function DynamicMiningButton({
 
       case MiningButtonState.COMPLETED:
         return {
-          text: 'Ödülü Topla',
-          bgClass: 'bg-gradient-to-r from-[#2ff7c1] to-[#5ff7d5] hover:shadow-lg hover:shadow-[#2ff7c1]/30',
-          textClass: 'text-[#0d253f]',
-          icon: (
-            <svg xmlns="http://www.w3.org/2000/svg" className={`${sizeClasses.icon} mr-2`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+          text: (
+            <div className="flex flex-col items-center w-full">
+              <div className="flex items-center mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className={`${sizeClasses.icon} mr-2`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="font-medium">Ödülü Topla</span>
+              </div>
+              <div className="text-xs text-center">
+                <span className="text-[#0d253f] font-medium">
+                  💰 {formatCurrency(miningSession?.expected_reward || 0)} NMFP Hazır!
+                </span>
+              </div>
+            </div>
           ),
+          bgClass: 'bg-gradient-to-r from-[#2ff7c1] to-[#5ff7d5] hover:shadow-lg hover:shadow-[#2ff7c1]/30 animate-pulse',
+          textClass: 'text-[#0d253f]',
+          icon: null,
           disabled: false,
           onClick: () => {
             if (miningSession) {

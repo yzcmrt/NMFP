@@ -208,7 +208,7 @@ export default function CarPage() {
     };
     
     if (user && !isUserLoading) {
-      fetchUserCars();
+    fetchUserCars();
     }
   }, [user?.id, isUserLoading]); // Sadece user ID değişirse
   
@@ -1325,7 +1325,7 @@ export default function CarPage() {
                                 canStartMining={car.fuel >= 25 && car.condition >= 10} // Proper car condition check
                                 onStartMining={handleStartMining}
                                 onClaimReward={handleCompleteMining}
-                                size="sm"
+                                size="md"
                               />
                             );
                           })()}
