@@ -33,6 +33,8 @@ import { useRealtimeMining } from '@/hooks/useRealtimeMining';
 import { useImmediateSync } from '@/hooks/useImmediateSync';
 // Import mining state sync
 import { useMiningStateSync } from '@/hooks/useMiningStateSync';
+// Import auto state cleanup
+import { useAutoStateCleanup } from '@/hooks/useAutoStateCleanup';
 // Import error boundary
 import MiningErrorBoundary from '@/utils/errorBoundary';
 
@@ -103,6 +105,17 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       console.log('[MiningArea] State sync: Updating sessions from server');
       setActiveMiningSessions(freshSessions);
     }
+  });
+  
+  // Auto state cleanup (stale session removal)
+  const { triggerCleanup } = useAutoStateCleanup({
+    userId: user?.id || '',
+    localSessions: activeMiningSessions,
+    onSessionsCleanup: (cleanSessions) => {
+      console.log('[MiningArea] Auto cleanup: Removing stale sessions');
+      setActiveMiningSessions(cleanSessions);
+    },
+    onBalanceRefresh: async () => { await refreshBalance(); }
   });
   
   // Backward compatibility için timeLeft ve progress
@@ -317,9 +330,12 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
     
     loadInitialData();
     
-    // İlk yükleme sonrası 5 dakikada bir kontrol et (çok daha az sıklık)
+    // İlk yükleme sonrası 5 dakikada bir kontrol et + auto cleanup
     const intervalId = setInterval(() => {
-      if (isMounted && !isLoading) fetchData();
+      if (isMounted && !isLoading) {
+        fetchData();
+        triggerCleanup(); // Stale session'ları temizle
+      }
     }, 300000); // 5 dakika
     
     // Component unmount olduğunda interval temizle
@@ -333,7 +349,47 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
   const completeMiningSession = async (sessionId: number) => {
     if (!user?.id) return;
     
-    // Mining session bilgisini al
+    // CRITICAL: Backend'ten fresh session durumunu kontrol et
+    try {
+      const freshSessions = await miningService.getAllActiveMiningSessions(user.id);
+      const freshSession = freshSessions.find(s => s.id === sessionId);
+      
+      console.log('[MiningArea] Fresh session check:', {
+        sessionId,
+        freshSession: freshSession ? {
+          id: freshSession.id,
+          status: freshSession.status,
+          completed_at: freshSession.completed_at
+        } : null
+      });
+      
+      // Session backend'te yoksa veya completed'sa
+      if (!freshSession || freshSession.status === MiningStatus.COMPLETED) {
+        console.warn('[MiningArea] Session already completed on backend, cleaning up frontend state...');
+        
+        // Frontend state'i temizle
+        setActiveMiningSessions(prev => prev.filter(s => s.id !== sessionId));
+        
+        toast.success('Bu mining session zaten tamamlanmış! Frontend durumu güncellendi.', {
+          style: {
+            background: 'rgba(47, 247, 193, 0.1)',
+            color: '#2ff7c1',
+            border: '1px solid rgba(47, 247, 193, 0.3)'
+          }
+        });
+        
+        // Force balance refresh
+        await refreshBalance();
+        
+        return; // Exit early
+      }
+      
+    } catch (syncError) {
+      console.error('[MiningArea] Session sync check failed:', syncError);
+      // Continue with normal flow
+    }
+    
+    // Mining session bilgisini al (local state'ten)
     const currentSession = activeMiningSessions.find(s => s.id === sessionId);
     if (!currentSession) {
       toast.error('Mining oturumu bulunamadı!');

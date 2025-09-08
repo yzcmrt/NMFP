@@ -68,30 +68,35 @@ export default function DynamicMiningButton({
     // Mining session status check (öncelikli)
     if (miningSession) {
       if (process.env.NODE_ENV === 'development') {
-        console.log('[DynamicMiningButton] Has mining session:', miningSession.status);
+        console.log('[DynamicMiningButton] Has mining session:', {
+          id: miningSession.id,
+          status: miningSession.status,
+          endTime: miningSession.end_time
+        });
       }
       
-      if (miningSession.status === MiningStatus.COMPLETED) {
+      // CRITICAL: Time-based completion check first
+      const now = Date.now();
+      const endTime = new Date(miningSession.end_time).getTime();
+      const hasExpired = now >= endTime;
+      
+      if (miningSession.status === MiningStatus.COMPLETED || hasExpired) {
         if (process.env.NODE_ENV === 'development') {
-          console.log('[DynamicMiningButton] Session completed, showing claim button');
+          console.log('[DynamicMiningButton] Session ready for claim:', {
+            status: miningSession.status,
+            hasExpired,
+            timeLeft: hasExpired ? 0 : endTime - now
+          });
         }
         return MiningButtonState.COMPLETED;
       } else if (miningSession.status === MiningStatus.ACTIVE) {
-        // Check if mining time has expired
-        const now = Date.now();
-        const endTime = new Date(miningSession.end_time).getTime();
-        
-        if (now >= endTime) {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[DynamicMiningButton] Mining time expired, showing claim button');
-          }
-          return MiningButtonState.COMPLETED;
-        } else {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[DynamicMiningButton] Mining in progress, showing mining state');
-          }
-          return MiningButtonState.MINING;
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[DynamicMiningButton] Mining in progress:', {
+            timeLeft: endTime - now,
+            progress: Math.round(((now - new Date(miningSession.start_time).getTime()) / (endTime - new Date(miningSession.start_time).getTime())) * 100)
+          });
         }
+        return MiningButtonState.MINING;
       }
     }
     

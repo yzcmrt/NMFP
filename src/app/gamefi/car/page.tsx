@@ -46,6 +46,8 @@ import { safePurchase, validateBalance, safeMiningClaim } from '@/utils/transact
 import { useImmediateSync } from '@/hooks/useImmediateSync';
 // Import mining state sync
 import { useMiningStateSync } from '@/hooks/useMiningStateSync';
+// Import auto state cleanup
+import { useAutoStateCleanup } from '@/hooks/useAutoStateCleanup';
 
 // Nadir seviye sıralaması (UI için kalabilir)
 const rarityOrder = {
@@ -138,6 +140,17 @@ export default function CarPage() {
     }
   });
   
+  // Auto state cleanup (stale session removal)
+  const { triggerCleanup } = useAutoStateCleanup({
+    userId: user?.id || '',
+    localSessions: activeMiningSessions,
+    onSessionsCleanup: (cleanSessions) => {
+      console.log('[CarPage] Auto cleanup: Removing stale sessions');
+      setActiveMiningSessions(cleanSessions);
+    },
+    onBalanceRefresh: async () => { await refreshBalance(); }
+  });
+  
   // Backward compatibility için timeLeft ve progress helper'ları
   const timeLeft: { [key: number]: string } = {};
   const progress: { [key: number]: number } = {};
@@ -162,31 +175,32 @@ export default function CarPage() {
   
   // Simplified state management
 
-  // Fetch user cars when user context is available
+  // Fetch user cars when user context is available (single load)
   useEffect(() => {
     const fetchUserCars = async () => {
-      if (!user || !user.id) { 
-          console.warn('>>> car/page.tsx - fetchUserCars - Kullanıcı veya ID yok, API çağrısı atlanıyor.');
+      if (!user || !user.id || isSubscribedRef.current) { 
           return; 
-      } // Wait for user data
+      }
       
-      console.log(`>>> car/page.tsx - fetchUserCars - API çağrısı yapılacak kullanıcı ID: ${user.id}`);
+      console.log(`[CarPage] İlk araç verisi yükleme: ${user.id}`);
 
       try {
-        // --- AUTH KONTROL BLOĞU KALDIRILDI ---
-        // supabase.auth.getSession(), supabase.auth.getUser() ve ID karşılaştırması kaldırıldı.
-        // Artık sadece context'ten gelen user nesnesine güveniyoruz.
-        
         setIsLoading(true);
         setError(null);
-        const cars = await userCarService.getUserCars(user.id); // Pass user.id
-        console.log('>>> car/page.tsx - fetchUserCars - Gelen Araçlar:', cars);
+        const cars = await userCarService.getUserCars(user.id);
+        console.log('[CarPage] Gelen araçlar:', cars.length);
         setUserCars(cars);
         
-        // Mining oturumlarını güncelle
-        fetchMiningSessions();
+        // Mining oturumlarını da yükle
+        await fetchMiningSessions();
+        
+        // Auto cleanup trigger
+        await triggerCleanup();
+        
+        isSubscribedRef.current = true;
+        
       } catch (err: any) {
-        console.error('Araç yükleme hatası:', err);
+        console.error('[CarPage] Araç yükleme hatası:', err);
         setError(err.message || 'Araçlarım yüklenirken bir hata oluştu.');
       } finally {
         setIsLoading(false);
@@ -194,9 +208,9 @@ export default function CarPage() {
     };
     
     if (user && !isUserLoading) {
-    fetchUserCars();
+      fetchUserCars();
     }
-  }, [user, isUserLoading]); // Re-fetch when user changes
+  }, [user?.id, isUserLoading]); // Sadece user ID değişirse
   
   // Fetch available car models
   useEffect(() => {
@@ -878,7 +892,46 @@ export default function CarPage() {
       return;
     }
 
-    // Mining session'ı bul
+    // CRITICAL: Backend'ten fresh session durumunu kontrol et
+    try {
+      const freshSessions = await miningService.getAllActiveMiningSessions(user.id);
+      const freshSession = freshSessions.find(s => s.id === sessionId);
+      
+      console.log('[CarPage] Fresh session check before claim:', {
+        sessionId,
+        freshSession: freshSession ? {
+          id: freshSession.id,
+          status: freshSession.status
+        } : null
+      });
+      
+      // Session backend'te yoksa veya completed'sa
+      if (!freshSession || freshSession.status === MiningStatus.COMPLETED) {
+        console.warn('[CarPage] Session already completed on backend, cleaning up frontend state...');
+        
+        // Frontend state'i temizle
+        setActiveMiningSessions(prev => prev.filter(s => s.id !== sessionId));
+        
+        toast.success('Bu mining session zaten tamamlanmış! Durum güncellendi.', {
+          style: {
+            background: 'rgba(47, 247, 193, 0.1)',
+            color: '#2ff7c1',
+            border: '1px solid rgba(47, 247, 193, 0.3)'
+          }
+        });
+        
+        // Force balance refresh
+        await refreshBalance();
+        
+        return; // Exit early
+      }
+      
+    } catch (syncError) {
+      console.error('[CarPage] Session sync check failed:', syncError);
+      // Continue with normal flow
+    }
+
+    // Mining session'ı bul (local state'ten)
     const miningSession = activeMiningSessions.find(s => s.id === sessionId);
     if (!miningSession) {
       toast.error('Mining oturumu bulunamadı.');
