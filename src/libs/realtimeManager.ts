@@ -51,7 +51,9 @@ export class RealtimeManager {
     
     // Duplicate subscription kontrolü
     if (this.channels.has(channelName)) {
-      console.log(`[RealtimeManager] Already subscribed to ${channelName}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[RealtimeManager] Already subscribed to ${channelName}`);
+      }
       return this.channels.get(channelName)!;
     }
 
@@ -416,20 +418,28 @@ export class RealtimeManager {
    */
   async refreshUserBalance(userId: string): Promise<boolean> {
     try {
+      console.log('[RealtimeManager] Refreshing balance for user:', userId);
+      
       const { data, error } = await supabase
         .from('users')
         .select('balance')
         .eq('id', userId)
-        .single();
+        .maybeSingle(); // Use maybeSingle instead of single to avoid PGRST116 error
 
-      if (error) throw error;
+      if (error) {
+        console.error('[RealtimeManager] Supabase error:', error);
+        throw error;
+      }
       
       if (data) {
         useBalanceStore.getState().setBalance(userId, data.balance);
+        console.log('[RealtimeManager] Balance refreshed successfully:', data.balance);
         return true;
+      } else {
+        console.warn('[RealtimeManager] No user data found for ID:', userId);
+        return false;
       }
       
-      return false;
     } catch (error) {
       console.error('[RealtimeManager] Failed to refresh user balance:', error);
       return false;

@@ -37,8 +37,8 @@ export default function GamefiLayout({
     { href: '/gamefi/task', label: 'Task', icon: <TaskIcon /> },
     { href: '/gamefi/stats', label: 'Stats', icon: <ChartIcon /> },
     { href: '/gamefi/wallet', label: 'Wallet', icon: <WalletIcon /> },
-    // Debug sayfası (sadece development'ta)
-    ...(process.env.NODE_ENV === 'development' ? [
+    // Debug sayfası (sadece development'ta ve localhost'ta)
+    ...(process.env.NODE_ENV === 'development' && typeof window !== 'undefined' && window.location.hostname === 'localhost' ? [
       { href: '/gamefi/test-mining', label: '🧪', icon: <span className="text-xs">TEST</span> }
     ] : [])
   ];

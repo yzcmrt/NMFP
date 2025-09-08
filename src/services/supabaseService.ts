@@ -134,17 +134,31 @@ export const userService = {
    * Sadece kullanıcı ID'sine göre kullanıcı bilgilerini getirir
    */
    async getUserById(userId: string): Promise<User | null> {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId) // String UUID ile filtrele
-      .single();
+    try {
+      console.log('[supabaseService] getUserById called for:', userId);
+      
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId) // String UUID ile filtrele
+        .maybeSingle(); // Use maybeSingle to avoid PGRST116 error
 
-    if (error && error.code !== 'PGRST116') { 
-      handleSupabaseError(error, 'getUserById');
-      return null; 
-    } 
-    if (!data) return null; 
+      if (error) { 
+        console.error('[supabaseService] getUserById error:', error);
+        handleSupabaseError(error, 'getUserById');
+        return null; 
+      } 
+      
+      if (!data) {
+        console.warn('[supabaseService] No user found for ID:', userId);
+        return null;
+      }
+
+      console.log('[supabaseService] User found successfully:', {
+        id: data.id,
+        username: data.username,
+        balance: data.balance
+      }); 
 
     return {
       id: data.id, // string UUID

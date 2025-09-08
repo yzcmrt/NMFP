@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { formatCurrency, formatNumber } from '@/app/utils/formatters';
@@ -61,6 +61,9 @@ export default function GameFiPage() {
 
   const [localUserLevel, setLocalUserLevel] = useState<number | null>(null);
   const [localUserXP, setLocalUserXP] = useState<number | null>(null);
+  
+  // Subscription tracking to prevent infinite loops
+  const isSubscribedRef = useRef(false);
   
   // Yeni state'ler
   const [isPreparingCars, setIsPreparingCars] = useState<boolean>(false);
@@ -123,9 +126,6 @@ export default function GameFiPage() {
       setActiveMiningSessions(activeSessions);
         setTransactions(recentTransactions);
         
-        // Kullanıcı verisini de tazeleyelim
-        await refreshUserData();
-        
       console.log('✅ fetchInitialData tamamlandı.');
     } catch (err: any) {
       console.error('❌ fetchInitialData hatası:', err);
@@ -133,7 +133,7 @@ export default function GameFiPage() {
       } finally {
         setDataLoading(false);
       }
-  }, [refreshUserData]);
+  }, []);
 
   // Local user bilgilerini context'ten başlat
   useEffect(() => {
@@ -143,20 +143,22 @@ export default function GameFiPage() {
     }
   }, [contextUser]);
 
+  // Initial data loading only once when user is available
   useEffect(() => {
-    console.log('GameFiPage: contextUser durumu değişti:', contextUser);
-    if (contextUser) {
-      console.log('GameFiPage: contextUser mevcut, veri çekiliyor.');
+    if (contextUser?.id && !isSubscribedRef.current) {
+      console.log('GameFiPage: İlk veri yükleme başlatılıyor:', contextUser.id);
       fetchInitialData(contextUser.id);
-    } else {
+      isSubscribedRef.current = true;
+    } else if (!contextUser) {
       console.log('GameFiPage: contextUser null, veriler temizleniyor.');
       setUserCars([]);
       setGarages([]);
       setActiveMiningSessions([]);
       setTransactions([]);
       setDataLoading(false);
+      isSubscribedRef.current = false;
     }
-  }, [contextUser, fetchInitialData]);
+  }, [contextUser?.id]); // Sadece user ID değişirse çalışsın
 
   // Sayfalar arası geçişlerde otomatik veri yenileme için
   useEffect(() => {
@@ -214,7 +216,7 @@ export default function GameFiPage() {
       window.removeEventListener('focus', handleFocus);
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, [contextUser, fetchInitialData, refreshBalance]);
+  }, [contextUser]);
 
   // --- Dinamik Kalan Süre Hesaplama için useEffect ---
   useEffect(() => {

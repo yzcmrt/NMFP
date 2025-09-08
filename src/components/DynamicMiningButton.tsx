@@ -274,8 +274,8 @@ export default function DynamicMiningButton({
         } else if (!canStartMining) {
           disabledText = 'Garaj Dolu';
         } else if (car.status === CarStatus.MINING || car.status === 'mining') {
-          // Car status mining ama session yok - veri uyumsuzluğu
-          disabledText = 'Senkronize Ediliyor...';
+          // Car status mining ama session yok - veri uyumsuzluğu (temporary state)
+          disabledText = 'Mining Verisi Yükleniyor...';
         } else if (car.status !== CarStatus.ACTIVE && car.status !== 'active') {
           disabledText = `Durum: ${car.status}`;
         }

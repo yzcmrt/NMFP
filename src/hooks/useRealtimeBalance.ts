@@ -58,7 +58,7 @@ export function useRealtimeBalance({
 
   // Subscribe to realtime updates
   useEffect(() => {
-    if (!userId || isSubscribedRef.current) return;
+    if (!userId || isSubscribedRef.current || userId === '') return;
 
     console.log(`[useRealtimeBalance] Setting up realtime subscription for ${userId}`);
     
@@ -68,6 +68,7 @@ export function useRealtimeBalance({
         isSubscribedRef.current = true;
       } catch (error) {
         console.error('[useRealtimeBalance] Subscription setup failed:', error);
+        isSubscribedRef.current = false; // Reset on error
       }
     };
 
@@ -132,7 +133,7 @@ export function useRealtimeBalance({
         isSubscribedRef.current = false;
       }
     };
-  }, [userId, onBalanceChange, commitTransaction]);
+  }, [userId]); // Sadece userId dependency'si
 
   // Manual refresh function
   const refreshBalance = useCallback(async (): Promise<boolean> => {

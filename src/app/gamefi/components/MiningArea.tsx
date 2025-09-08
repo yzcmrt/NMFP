@@ -29,6 +29,8 @@ import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
 import DynamicMiningButton, { useMiningButtonState } from '@/components/DynamicMiningButton';
 // Import realtime mining progress
 import { useRealtimeMining } from '@/hooks/useRealtimeMining';
+// Import immediate sync
+import { useImmediateSync } from '@/hooks/useImmediateSync';
 
 interface MiningAreaProps {
   onBalanceUpdate?: (newBalance?: number) => Promise<void>;
@@ -85,6 +87,9 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       );
     }
   });
+  
+  // Immediate sync utilities
+  const { syncMiningSession } = useImmediateSync();
   
   // Backward compatibility için timeLeft ve progress
   const timeLeft: { [key: number]: string } = {};
@@ -298,16 +303,15 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
     
     loadInitialData();
     
-    // İlk yükleme sonrası 60 saniyede bir kontrol et (5 sn yerine)
+    // İlk yükleme sonrası 5 dakikada bir kontrol et (çok daha az sıklık)
     const intervalId = setInterval(() => {
       if (isMounted && !isLoading) fetchData();
-    }, 60000); // 5000'den 60000'e değiştirildi (1 dakika)
+    }, 300000); // 5 dakika
     
     // Component unmount olduğunda interval temizle
     return () => {
       isMounted = false;
       clearInterval(intervalId);
-      // Timer management artık useRealtimeMining hook'unda
     };
   }, []);
   
@@ -591,27 +595,45 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
           car.id === carId ? { ...car, status: CarStatus.MINING } : car
         ));
         
-        // 2. Mining session'ları hemen güncelle
-        try {
-          const sessions = await miningService.getAllActiveMiningSessions(user.id);
-          console.log('[MiningArea] Fresh mining sessions after start:', sessions);
-          setActiveMiningSessions(sessions);
-
-          // Araç durumunu server'dan da güncelle (async, blocking yapmaz)
-          setTimeout(async () => {
+        // 2. Mining session'ı immediate sync ile güncelle
+        syncMiningSession(
+          user.id,
+          newSessionId,
+          // onSuccess: Session bulundu
+          (newSession) => {
+            setActiveMiningSessions(prev => {
+              // Var olan session'ı güncelle veya ekle
+              const exists = prev.find(s => s.id === newSession.id);
+              if (exists) {
+                return prev.map(s => s.id === newSession.id ? newSession : s);
+              } else {
+                return [...prev, newSession];
+              }
+            });
+            
+            console.log('[MiningArea] ✅ Mining session immediately synchronized:', newSession);
+            
+            // Araç durumunu server'dan da güncelle (async, non-blocking)
+            setTimeout(async () => {
+              try {
           const updatedCars = await userCarService.getUserCars(user.id);
           if (updatedCars) {
             setUserCars(updatedCars);
             calculateTotalMiningPower(updatedCars);
             calculateTotalCosts(updatedCars);
           }
-          }, 1000);
-          
-        } catch (updateError) {
-          console.error('[MiningArea] Mining session fetch error after start:', updateError);
-          // Fallback: refresh data
-          setTimeout(() => fetchData(), 500);
-        }
+              } catch (err) {
+                console.warn('[MiningArea] Car update error:', err);
+              }
+            }, 1000);
+          },
+          // onTimeout: Session bulunamadı
+          () => {
+            console.error('[MiningArea] 🚨 Mining session sync timeout');
+            // Emergency fallback
+            setTimeout(() => fetchData(), 1000);
+          }
+        );
       } else {
         toast.error('Mining başlatılamadı.', { id: toastId });
       }

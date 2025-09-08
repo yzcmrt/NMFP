@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
 import { formatCurrency, formatNumber } from '@/app/utils/formatters';
 import { 
@@ -40,6 +40,10 @@ import DynamicMiningButton, { useMiningButtonState } from '@/components/DynamicM
 import { useRealtimeMining } from '@/hooks/useRealtimeMining';
 // Import debug utilities
 import { debugMining, miningMetrics } from '@/utils/debugMining';
+// Import transaction safety
+import { safePurchase, validateBalance, safeMiningClaim } from '@/utils/transactionSafety';
+// Import immediate sync
+import { useImmediateSync } from '@/hooks/useImmediateSync';
 
 // Nadir seviye sıralaması (UI için kalabilir)
 const rarityOrder = {
@@ -118,7 +122,10 @@ export default function CarPage() {
       );
     }
   });
-
+  
+  // Immediate sync utilities
+  const { syncMiningSession } = useImmediateSync();
+  
   // Backward compatibility için timeLeft ve progress helper'ları
   const timeLeft: { [key: number]: string } = {};
   const progress: { [key: number]: number } = {};
@@ -129,13 +136,18 @@ export default function CarPage() {
     progress[id] = progressInfo.progress || 0;
   });
   
-  console.log('[CarPage] Mining progress data:', {
-    activeSessions: activeMiningSessions.length,
-    progressDataKeys: Object.keys(miningProgress),
-    timeLeftKeys: Object.keys(timeLeft),
-    progressKeys: Object.keys(progress)
-  });
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[CarPage] Mining progress data:', {
+      activeSessions: activeMiningSessions.length,
+      progressDataKeys: Object.keys(miningProgress),
+      timeLeftKeys: Object.keys(timeLeft),
+      progressKeys: Object.keys(progress)
+    });
+  }
 
+  // Subscription tracking to prevent loops  
+  const isSubscribedRef = useRef(false);
+  
   // Simplified state management
 
   // Fetch user cars when user context is available
@@ -363,6 +375,11 @@ export default function CarPage() {
                 purchasePrice = model.nmfp_price;
                 currency = 'NMFP';
                 
+                // Balance validation (CRITICAL)
+                if (!validateBalance(realtimeBalance, purchasePrice, `NMFP Car Purchase: ${model.name}`)) {
+                  throw new Error('Yetersiz NMFP bakiyesi!');
+                }
+                
                 // NMFP satın almalar için optimistic update
                 addOptimisticTransaction({
                   id: transactionId,
@@ -370,11 +387,6 @@ export default function CarPage() {
                   type: 'purchase',
                   description: `${model.name} satın alındı (NMFP)`
                 });
-                
-                // Insufficient balance kontrolü (optimistic balance ile)
-                if (realtimeBalance < purchasePrice) {
-                  throw new Error('Yetersiz NMFP bakiyesi!');
-                }
                 break;
             case 'TON':
                 purchasePrice = model.ton_price;
@@ -677,28 +689,32 @@ export default function CarPage() {
             c.id === car.id ? { ...c, status: CarStatus.MINING } : c
         ));
         
-        // 2. Mining oturumlarını hemen fetch et ve güncelle
-        try {
-          const updatedSessions = await miningService.getAllActiveMiningSessions(user.id);
-          console.log('[CarPage] Fresh mining sessions after start:', updatedSessions);
-          setActiveMiningSessions(updatedSessions);
-          
-          // Yeni session'ı bul ve kontrol et
-          const newSession = updatedSessions.find(s => s.id === newSessionId);
-          if (newSession) {
-            console.log('[CarPage] New mining session found:', newSession);
-          } else {
-            console.warn('[CarPage] New mining session not found in updated list');
+        // 2. Mining session'ı immediate sync ile güncelle
+        syncMiningSession(
+          user.id,
+          newSessionId,
+          // onSuccess: Session bulundu
+          (newSession) => {
+            setActiveMiningSessions(prev => {
+              // Var olan session'ı güncelle veya ekle
+              const exists = prev.find(s => s.id === newSession.id);
+              if (exists) {
+                return prev.map(s => s.id === newSession.id ? newSession : s);
+              } else {
+                return [...prev, newSession];
+              }
+            });
+            
+            console.log('[CarPage] ✅ Mining session immediately synchronized:', newSession);
+          },
+          // onTimeout: Session bulunamadı
+          () => {
+            console.error('[CarPage] 🚨 Mining session sync timeout');
+            // Manual fallback
+            setLastUpdateTime(0);
+            setTimeout(() => fetchMiningSessions(), 1000);
           }
-          
-        } catch (fetchError) {
-          console.error('[CarPage] Mining session fetch error after start:', fetchError);
-          // Fallback: rate limit bypass
-          setLastUpdateTime(0);
-          setTimeout(async () => {
-            await fetchMiningSessions();
-          }, 500);
-        }
+        );
         
         toast.success(`${car.name} mining başlatıldı!`, { id: toastId });
       } else {
@@ -944,9 +960,9 @@ export default function CarPage() {
     if (!user?.id) return;
     
     const now = Date.now();
-    // Son API çağrısından bu yana en az 30 saniye geçmiş mi kontrol et
-    if (now - lastUpdateTime < 30000) {
-      console.log('[CarPage] Son API çağrısından bu yana 30 saniye geçmedi, çağrı atlanıyor');
+    // Rate limiting: 10 saniye (mining start sonrası için daha hızlı)
+    if (now - lastUpdateTime < 10000) {
+      console.log('[CarPage] Son API çağrısından bu yana 10 saniye geçmedi, çağrı atlanıyor');
       return;
     }
     
@@ -960,21 +976,23 @@ export default function CarPage() {
     }
   }, [user?.id, lastUpdateTime]);
 
-  // Mining oturumlarını sayfa yüklendiğinde ve kullanıcı değiştiğinde getir
+  // Mining oturumlarını sadece ilk kez yükle
   useEffect(() => {
-    if (user?.id && !isUserLoading) {
+    if (user?.id && !isUserLoading && !isSubscribedRef.current) {
       fetchMiningSessions();
+      isSubscribedRef.current = true;
       
-      // Düzenli kontrol için 2 dakikalık interval
+      // Düzenli kontrol için 5 dakikalık interval (daha az sıklık)
       const checkInterval = setInterval(() => {
         fetchMiningSessions();
-      }, 120000); // 2 dakika (daha sık kontrol)
+      }, 300000); // 5 dakika
       
       return () => {
         clearInterval(checkInterval);
+        isSubscribedRef.current = false;
       };
     }
-  }, [user?.id, isUserLoading, fetchMiningSessions]);
+  }, [user?.id, isUserLoading]); // fetchMiningSessions dependency kaldırıldı
 
   // Araç için mining oturumunu bul (active veya completed)
   const getMiningSessionForCar = (carId: number): MiningSession | undefined => {

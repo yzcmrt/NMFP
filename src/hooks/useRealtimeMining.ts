@@ -33,9 +33,10 @@ export function useRealtimeMining({
   const formatTimeLeft = useCallback((milliseconds: number): string => {
     if (milliseconds <= 0) return '00:00:00';
     
-    const hours = Math.floor(milliseconds / (1000 * 60 * 60));
-    const minutes = Math.floor((milliseconds % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((milliseconds % (1000 * 60)) / 1000);
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
     
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   }, []);
@@ -46,12 +47,14 @@ export function useRealtimeMining({
     const startTime = new Date(session.start_time).getTime();
     const endTime = new Date(session.end_time).getTime();
     
-    console.log(`[useRealtimeMining] Calculating progress for session ${session.id}:`, {
-      now: new Date(now).toISOString(),
-      startTime: new Date(startTime).toISOString(),
-      endTime: new Date(endTime).toISOString(),
-      sessionStatus: session.status
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[useRealtimeMining] Calculating progress for session ${session.id}:`, {
+        now: new Date(now).toISOString(),
+        startTime: new Date(startTime).toISOString(),
+        endTime: new Date(endTime).toISOString(),
+        sessionStatus: session.status
+      });
+    }
     
     if (now >= endTime) {
       return {
@@ -87,10 +90,12 @@ export function useRealtimeMining({
       sessionId: session.id
     };
     
-    console.log(`[useRealtimeMining] Session ${session.id} progress:`, result);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[useRealtimeMining] Session ${session.id} progress:`, result);
+    }
     
     return result;
-  }, [formatTimeLeft]);
+  }, []); // formatTimeLeft dependency kaldırıldı - stable function
 
   // Update progress for all active sessions
   const updateAllProgress = useCallback(() => {
@@ -143,7 +148,7 @@ export function useRealtimeMining({
         updateServerProgress();
       }, 2000); // 2 saniye sonra server'ı kontrol et
     }
-  }, [sessions, calculateSessionProgress, onProgressUpdate, onSessionCompleted]);
+  }, []); // Dependency'ler kaldırıldı - callback stabilization için
 
   // Server'dan güncel mining durumunu çek
   const updateServerProgress = useCallback(async () => {
@@ -161,7 +166,7 @@ export function useRealtimeMining({
     } catch (error) {
       console.error('[useRealtimeMining] Server progress update failed:', error);
     }
-  }, [userId, onSessionCompleted]);
+  }, [userId]); // Callback dependency'leri kaldırıldı
 
   // Setup realtime subscriptions
   useEffect(() => {
@@ -198,7 +203,7 @@ export function useRealtimeMining({
     return () => {
       window.removeEventListener('batchMiningUpdate', handleBatchUpdate as EventListener);
     };
-  }, [userId, sessions]);
+  }, [userId]); // sessions dependency kaldırıldı - sadece userId değişirse subscription yenilesin
 
   // Client-side progress calculation as fallback
   useEffect(() => {
@@ -224,7 +229,7 @@ export function useRealtimeMining({
         intervalRef.current = null;
       }
     };
-  }, [sessions, updateAllProgress]);
+  }, []); // Dependency array boşaltıldı - sadece mount/unmount'da çalışsın
 
   // Cleanup on unmount
   useEffect(() => {
@@ -239,7 +244,7 @@ export function useRealtimeMining({
   const refreshProgress = useCallback(async () => {
     await updateServerProgress();
     updateAllProgress();
-  }, [updateServerProgress, updateAllProgress]);
+  }, []); // Dependencies kaldırıldı - stable callbacks
 
   return {
     progressData,

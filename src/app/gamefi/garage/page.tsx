@@ -16,6 +16,8 @@ import { garageService } from '@/services/api';
 import { useTelegram } from '@/components/TelegramInitProvider';
 // Import realtime balance management
 import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
+// Import transaction safety
+import { validateBalance } from '@/utils/transactionSafety';
 
 // Mock data is removed
 // const garages = [ ... ];
@@ -153,8 +155,8 @@ export default function GaragePage() {
               description: `${template.name} garaj satın alındı`
             });
             
-            // Insufficient balance kontrolü (realtime balance ile)
-            if (realtimeBalance < purchasePrice) {
+            // Balance validation (CRITICAL SAFETY)
+            if (!validateBalance(realtimeBalance, purchasePrice, `NMFP Garage Purchase: ${template.name}`)) {
                 throw new Error(`Yetersiz ${currency}. Gerekli: ${formatCurrency(purchasePrice)}`);
             }
         } else if (template.purchase_type === 'ton') {
