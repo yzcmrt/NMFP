@@ -3,42 +3,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { FaTwitter, FaTelegram } from 'react-icons/fa';
-import { useState, useEffect } from 'react';
+
 
 const Footer = () => {
   const pathname = usePathname();
-  const [isGamefiSubdomain, setIsGamefiSubdomain] = useState(false);
-  const [shouldRender, setShouldRender] = useState(true);
+  const shouldRender = !pathname?.startsWith('/gamefi');
 
-  // Client tarafında subdomain kontrolü - daha kapsamlı kontrol
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname || '';
-      const currentUrl = window.location.href || '';
-      
-      // Hem hostname kontrolü hem de URL paterni kontrolü
-      const isGamefiDomain: boolean = !!(
-        hostname.startsWith('gamefi.') || 
-        hostname.includes('gamefi.needmoneyforporsche.wtf') ||
-        currentUrl.includes('gamefi.needmoneyforporsche.wtf') ||
-        (pathname && pathname.includes('/gamefi'))
-      );
-      
-      setIsGamefiSubdomain(isGamefiDomain);
-      
-      // GameFi sayfası veya subdomain ise bileşeni gizle
-      const isGamefiRoute: boolean = !!(pathname === '/gamefi' || 
-                       (pathname && pathname.startsWith('/gamefi/')));
-                       
-      setShouldRender(!(isGamefiRoute || isGamefiDomain));
-      
-      // Debug için konsola bilgileri yazdıralım
-      console.log('Footer - Hostname:', hostname);
-      console.log('Footer - Current URL:', currentUrl);
-      console.log('Footer - Is GameFi Domain:', isGamefiDomain);
-    }
-  }, [pathname]);
-  
   const year = new Date().getFullYear();
   
   // GameFi sayfalarında veya subdomain'de Footer'ı gösterme
@@ -56,7 +26,7 @@ const Footer = () => {
           <div className="h-full flex flex-col text-center">
             <h3 className="text-white text-lg font-bold mb-4">NMFP</h3>
             <p className="text-sm">
-              Never Miss Free Points is a platform that rewards players for participating in Web3 activities.
+              Need Money For Porsche is a game that rewards players for participating in Web3 activities.
             </p>
           </div>
 

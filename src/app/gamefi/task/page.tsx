@@ -50,7 +50,7 @@ export default function TaskPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [contextUser]);
+  }, [contextUser?.id]);
   
   // Sayfa yüklendiğinde görevleri getir
   useEffect(() => {
@@ -59,46 +59,14 @@ export default function TaskPage() {
     }
   }, [contextUser, fetchTasks]);
   
-  // Supabase Realtime ile task değişikliklerini dinle
   useEffect(() => {
     if (!contextUser?.id) return;
-    
-    // Tasks tablosundaki değişiklikleri dinle
-    const tasksChannel = supabase
-      .channel('tasks-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'tasks' }, 
-        (payload) => {
-          console.log('Task değişikliği:', payload);
-          fetchTasks(); // Tüm görevleri yeniden yükle
-        }
-      )
-      .subscribe();
-    
-    // UserTasks tablosundaki değişiklikleri dinle
-    const userTasksChannel = supabase
-      .channel('user-tasks-changes')
-      .on('postgres_changes', 
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'user_tasks',
-          filter: `user_id=eq.${contextUser.id}` 
-        }, 
-        (payload) => {
-          console.log('UserTask değişikliği:', payload);
-          fetchTasks(); // Tüm kullanıcı görevlerini yeniden yükle
-        }
-      )
-      .subscribe();
-    
-    // Cleanup
-    return () => {
-      supabase.removeChannel(tasksChannel);
-      supabase.removeChannel(userTasksChannel);
-    };
-  }, [contextUser, fetchTasks]);
-  
+    const refresh=()=>{if(document.visibilityState==='visible')void fetchTasks();};
+    const timer=setInterval(refresh,30000);
+    window.addEventListener('focus',refresh);
+    return()=>{clearInterval(timer);window.removeEventListener('focus',refresh);};
+  }, [contextUser?.id, fetchTasks]);
+
   // Görev doğrulama fonksiyonu - API endpoint üzerinden doğrulama
   const verifyTask = async (taskId: number) => {
     if (!contextUser?.id || !telegramUser?.id) {
@@ -331,7 +299,7 @@ export default function TaskPage() {
                         href="/gamefi/garage"
                         className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30"
                       >
-                        Garaj'a Git
+                        Garaja Git
                       </a>
                     )}
                     

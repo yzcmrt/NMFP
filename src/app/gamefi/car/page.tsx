@@ -1,4 +1,5 @@
 'use client';
+import { starsCheckout } from '@/lib/starsCheckout';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
@@ -33,7 +34,6 @@ import { supabase } from '@/lib/supabaseClient';
 // Import realtime balance management
 import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
 // Import IPFS Service
-import { ipfsService as IPFSService } from '@/services/ipfsService';
 // Import dynamic mining button
 import DynamicMiningButton, { useMiningButtonState } from '@/components/DynamicMiningButton';
 // Import real-time mining progress
@@ -226,7 +226,7 @@ export default function CarPage() {
         // Series is not in DB schema, filtering/sorting might need changes
         // Visual path correction logic might still be needed if DB paths are inconsistent
         const processedModels = models.map(model => {
-          let adjustedModel = { ...model };
+          const adjustedModel = { ...model };
           // Ensure image_url is usable
           if (adjustedModel.image_url && !adjustedModel.image_url.startsWith('/')) {
             adjustedModel.image_url = `/${adjustedModel.image_url}`;
@@ -368,304 +368,21 @@ export default function CarPage() {
   
   // --- Purchase Handlers --- 
 
-  const handlePurchase = async (model: CarModel, purchaseType: 'NMFP' | 'TON' | 'NFT') => {
-    if (!user || !user.id) {
-      toast.error('Satın alma işlemi için kullanıcı bilgisi gerekli.');
-        return;
-      }
-    if (!model || !model.id) {
-        toast.error('Geçersiz model bilgisi.');
-        return;
-      }
-      
-    const loadingKey = `${purchaseType}-${model.id}`;
-    setPurchaseLoading(loadingKey);
-    
-    // Transaction ID'si oluştur
-    const transactionId = `purchase_${model.id}_${Date.now()}`;
-    
-    const toastId = toast.loading(`${model.name} satın alınıyor...`, {
-      style: {
-        background: 'rgba(26, 26, 46, 0.95)',
-        color: '#fff',
-        border: '1px solid rgba(42, 56, 85, 0.5)'
-      }
-    });
-
-    let purchasePrice: number = 0;
-    let currency: string = '';
-
+  const handlePurchase = async (model: CarModel, purchaseType: 'NMFP' | 'STARS') => {
+    if (!user?.id || purchaseLoading) return;
+    setPurchaseLoading(`${purchaseType}-${model.id}`);
+    const toastId=toast.loading('Satın alma hazırlanıyor…');
     try {
-        switch (purchaseType) {
-            case 'NMFP':
-                purchasePrice = model.nmfp_price;
-                currency = 'NMFP';
-                
-                // Balance validation (CRITICAL)
-                if (!validateBalance(realtimeBalance, purchasePrice, `NMFP Car Purchase: ${model.name}`)) {
-                  throw new Error('Yetersiz NMFP bakiyesi!');
-                }
-                
-                // NMFP satın almalar için optimistic update
-                addOptimisticTransaction({
-                  id: transactionId,
-                  amount: -purchasePrice,
-                  type: 'purchase',
-                  description: `${model.name} satın alındı (NMFP)`
-                });
-                break;
-            case 'TON':
-                purchasePrice = model.ton_price;
-                currency = 'TON';
-                
-                // TON transaction logic
-                if (tonConnectUI.connected && tonConnectUI.account?.address) {
-                    // Nano TON formatına dönüştür
-                    const nanoTonAmount = toNano(purchasePrice.toString()).toString();
-                    
-                    // Oyun cüzdan adresi (doğrula)
-                    const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY';
-                    
-                    // İşlem geçerlilik süresi (20 dakika)
-                    const validUntil = Math.floor(Date.now() / 1000) + 60 * 20;
-                    
-                    // Basitleştirilmiş işlem yapısı - minimum işlem yapısı kullanılıyor
-                    const transaction = {
-                        validUntil: validUntil,
-                        messages: [
-                            {
-                                address: gameWalletAddress,
-                                amount: nanoTonAmount
-                                // payload alanı kaldırıldı - BOC oluşturma hatasını önlemek için
-                            }
-                        ]
-                    };
-                    
-                    toast.loading('TON işlemi onaylanıyor...', { id: toastId });
-                    
-                    try {
-                        // İşlemi gönder ve sonucu bekle
-                        const result = await tonConnectUI.sendTransaction(transaction);
-                        
-                        if (result && result.boc) {
-                            console.log('TON işlem sonucu başarılı:', { 
-                                bocLength: result.boc.length,
-                                hasValidBoc: true
-                            });
-                            
-                            // İşlem başarılı, API'ye doğrulama için gönder
-                            toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
-                            
-                            // 5 saniyelik bekleme süresi ekleyin - işlemin yayılması için
-                            await new Promise(resolve => setTimeout(resolve, 5000));
-                        } else {
-                            console.error('TON işlemi başarısız - geçersiz boc:', result);
-                            toast.error("İşlem başarısız oldu! Geçersiz işlem sonucu.", { id: toastId });
-                            throw new Error("Geçersiz işlem sonucu");
-                        }
-                    } catch (txError) {
-                        console.error('TON işlem gönderme hatası:', txError);
-                        
-                        let txErrorMessage = "İşlem gönderilemedi";
-                        if (txError instanceof Error) {
-                            if (txError.message?.includes("magic")) {
-                                txErrorMessage = "İşlem oluşturulurken hata oluştu. Lütfen TON cüzdanınızı kontrol edip tekrar deneyin.";
-                            } else if (txError.message?.includes("reject") || txError.message?.includes("cancel")) {
-                                txErrorMessage = "İşlem kullanıcı tarafından iptal edildi.";
-                            } else if (txError.message?.includes("emulate")) {
-                                txErrorMessage = "İşlem simülasyonu başarısız oldu. Lütfen TON bakiyenizi kontrol edin.";
-                            }
-                        }
-                        
-                        toast.error(txErrorMessage, { id: toastId });
-                        throw new Error(txErrorMessage);
-                    }
-                } else {
-                    throw new Error('TON ile satın almak için cüzdanınızı bağlayın.');
-                }
-                break;
-            case 'NFT':
-                purchasePrice = model.nft_mint_price;
-                currency = 'TON'; // Minting usually costs TON
-                
-                // TON transaction logic for minting (if not handled solely by RPC)
-                if (tonConnectUI.connected && tonConnectUI.account?.address) {
-                    const nanoTonAmount = toNano(purchasePrice.toString()).toString();
-                    const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY'; 
-                    
-                    // İşlem geçerlilik süresi (20 dakika)
-                    const validUntil = Math.floor(Date.now() / 1000) + 60 * 20;
-                    
-                    // NFT minteleme için basit transaction yapısı
-                    const transaction = {
-                        validUntil: validUntil,
-                        messages: [
-                            {
-                                address: gameWalletAddress,
-                                amount: nanoTonAmount
-                                // karmaşık payload yapısından kaçınılıyor
-                            }
-                        ]
-                    };
-                    
-                    toast.loading('NFT Mint işlemi için TON onayı bekleniyor...', { id: toastId });
-                    
-                    try {
-                        // İşlemi gönder ve sonucu bekle
-                        const result = await tonConnectUI.sendTransaction(transaction);
-                        
-                        if (result && result.boc) {
-                            console.log('NFT Mint TON işlem sonucu başarılı:', { 
-                                bocLength: result.boc.length,
-                                hasValidBoc: true
-                            });
-                            
-                            // Modelin adını standartlaştır - timestamp kullanma
-                            const cleanModelName = model.name
-                                .replace(/^(Porsche|NMFP)\s+/g, '') // Ön ekleri kaldır 
-                                .trim()
-                                .replace(/\s+/g, '_')
-                                .toLowerCase();
-                            
-                            // Temiz dosya adıyla görüntü oluştur (timestamp YOK)
-                            const imageFileName = `car_${cleanModelName}.jpg`;
-                            
-                            // Görsel dosyasını NFT için oluştur
-                            if (!model.image_url) {
-                              throw new Error('Model görsel URL\'si bulunamadı');
-                            }
-                            
-                            const imageFile = await fetch(model.image_url)
-                                .then(res => res.blob())
-                                .then(blob => new File([blob], imageFileName, { type: 'image/jpeg' }));
-                            
-                            // IPFS servisini yükleme işleminde standart tanımlayıcı ile kullan
-                            const imageCid = await IPFSService.uploadImage(imageFile, cleanModelName);
-                            
-                            // Metadata oluştur - Standart format kullan
-                            const metadata = {
-                                name: model.name, // Orijinal model adını koru
-                                description: model.description || `${model.name} NFT`,
-                                image: `ipfs://${imageCid}`,
-                                attributes: [
-                                    {
-                                        trait_type: "Rarity",
-                                        value: model.rarity
-                                    },
-                                    {
-                                        trait_type: "Model",
-                                        value: model.name
-                                    },
-                                    {
-                                        trait_type: "Mining Power",
-                                        value: `${model.mining_power} NMFP/h`
-                                    },
-                                    {
-                                        trait_type: "Max Fuel",
-                                        value: model.max_fuel.toString()
-                                    },
-                                    {
-                                        trait_type: "Max Health", 
-                                        value: model.max_health.toString()
-                                    }
-                                ]
-                            };
-                            
-                            // Metadata'yı IPFS'e standart adlandırma ile yükle (timestamp YOK)
-                            const metadataCid = await IPFSService.uploadMetadata(metadata);
-                            
-                            toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
-                            
-                            // 5 saniyelik bekleme süresi ekleyin - işlemin yayılması için
-                            await new Promise(resolve => setTimeout(resolve, 5000));
-                        } else {
-                            console.error('NFT Mint TON işlemi başarısız - geçersiz boc:', result);
-                            toast.error("İşlem başarısız oldu! Geçersiz işlem sonucu.", { id: toastId });
-                            throw new Error("Geçersiz işlem sonucu");
-                        }
-                    } catch (txError) {
-                        console.error('NFT Mint TON işlem gönderme hatası:', txError);
-                        
-                        let txErrorMessage = "İşlem gönderilemedi";
-                        if (txError instanceof Error) {
-                            if (txError.message?.includes("magic")) {
-                                txErrorMessage = "İşlem oluşturulurken hata oluştu. Lütfen TON cüzdanınızı kontrol edip tekrar deneyin.";
-                            } else if (txError.message?.includes("reject") || txError.message?.includes("cancel")) {
-                                txErrorMessage = "İşlem kullanıcı tarafından iptal edildi.";
-                            } else if (txError.message?.includes("emulate")) {
-                                txErrorMessage = "İşlem simülasyonu başarısız oldu. Lütfen TON bakiyenizi kontrol edin.";
-                            }
-                        }
-                        
-                        toast.error(txErrorMessage, { id: toastId });
-                        throw new Error(txErrorMessage);
-                    }
-                } else {
-                    throw new Error('NFT mintlemek için cüzdanınızı bağlayın.');
-                }
-                break;
-            default:
-                throw new Error('Geçersiz satın alma tipi');
-        }
-
-        toast.loading(`Sunucu ile ${purchaseType} işlemi doğrulanıyor...`, { id: toastId });
-
-        // Call the RPC function AFTER potential TON transaction
-        const newCarId = await userCarService.purchaseCar(user.id, model.id, purchaseType);
-
-        if (newCarId !== null) {
-            // Transaction başarılı - optimistic update'i commit et
-            commitTransaction(transactionId);
-            
-            toast.success(`${model.name} başarıyla satın alındı!`, { 
-              id: toastId,
-              style: {
-                background: 'rgba(47, 247, 193, 0.1)',
-                color: '#2ff7c1',
-                border: '1px solid rgba(47, 247, 193, 0.3)'
-              }
-            });
-
-            // Refresh user cars list
-            const updatedCars = await userCarService.getUserCars(user.id);
-            setUserCars(updatedCars);
-            setActiveTab('my-cars'); // Switch to my cars tab
-
-            // Real-time balance refresh (fallback)
-            await refreshBalance();
-
-        } else {
-            throw new Error(`Araç satın alma işlemi başarısız oldu.`);
-        }
-
-    } catch (error: any) {
-      console.error(`${purchaseType} ile satın alma hatası:`, error);
-      
-      // Rollback optimistic transaction
-      if (purchaseType === 'NMFP') {
-        rollbackTransaction(transactionId);
+      if (purchaseType==='STARS') await starsCheckout('car',model.id);
+      else {
+        const id=await userCarService.purchaseCar(user.id,model.id,'NMFP');
+        if(!id)throw new Error('Araç satın alınamadı.');
       }
-      
-      let errorMessage = error.message || `${purchaseType} ile satın alma sırasında hata oluştu.`;
-      
-      // Specific error handling
-      if (errorMessage.includes('Yetersiz')) {
-        errorMessage = `Yetersiz ${currency} bakiyesi. Gerekli: ${formatCurrency(purchasePrice)}`;
-      } else if (errorMessage.includes('reject') || errorMessage.includes('cancel')) {
-        errorMessage = 'İşlem kullanıcı tarafından iptal edildi.';
-      }
-      
-      toast.error(errorMessage, { 
-        id: toastId,
-        style: {
-          background: 'rgba(239, 68, 68, 0.1)',
-          color: '#ef4444',
-          border: '1px solid rgba(239, 68, 68, 0.3)'
-        }
-      });
-    } finally {
-      setPurchaseLoading(null);
-    }
+      setUserCars(await userCarService.getUserCars(user.id));
+      await refreshBalance(); setActiveTab('my-cars');
+      toast.success(`${model.name} garajına eklendi.`,{id:toastId});
+    }catch(error){toast.error(error instanceof Error?error.message:'Satın alma tamamlanamadı.',{id:toastId});}
+    finally{setPurchaseLoading(null);}
   };
 
   // --- Mining Başlatma Fonksiyonu ---
@@ -1372,7 +1089,7 @@ export default function CarPage() {
             <div className="bg-gradient-to-b from-[#1a1a2e] to-[#16213e] rounded-xl p-5 shadow-lg border border-[#0f3460]">
               <h3 className="text-lg font-semibold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white">Araç Modelleri</h3>
               <p className="text-gray-400 text-sm mb-4">
-                 Farklı nadirliklerdeki araçları NMFP, TON ile satın alabilir veya NFT olarak mintleyebilirsiniz.
+                 Farklı nadirliklerdeki araçları NMFP puanları veya Telegram Stars ile satın alabilirsiniz.
               </p>
               
               {/* Market Filtresi (Series mantığı gözden geçirilmeli) */}
@@ -1447,22 +1164,6 @@ export default function CarPage() {
                         </div>
                       </div>
                       
-                      {/* NFT Limit Bilgisi */}
-                      <div className="px-5 py-3 border-b border-[#2a3855] bg-gradient-to-r from-[#0f3460]/30 to-[#1a1a2e]/30">
-                         {/* NFT Limit display using model.nft_limit */}
-                        <p className="text-gray-400 text-xs mb-1">NFT Limiti</p>
-                        <div className="flex items-center">
-                          <div className="w-full bg-[#2a3855] rounded-full h-2 mr-3">
-                            {/* TODO: Need current minted count from somewhere if progress bar is desired */}
-                            <div 
-                              className="bg-gradient-to-r from-[#2f7bf7] to-[#5f40f8] h-full rounded-full" 
-                              style={{ width: `0%` }} // Placeholder, need minted count
-                            ></div>
-                          </div>
-                          <span className="text-xs font-semibold text-white">0 / {model.nft_limit ?? '∞'}</span>
-                        </div>
-                      </div>
-                      
                       {/* Satın Alma Butonları */}
                       <div className="p-5 flex flex-col gap-3">
                         {/* Buy with NMFP Button */}
@@ -1484,45 +1185,27 @@ export default function CarPage() {
                               </>
                            )}
                         </button>
-                        {/* Buy with TON Button */}
+                        {/* Buy with Telegram Stars */}
                         <button 
                           type="button"
-                          className={`bg-gradient-to-r from-[#0088cc] to-[#00a2e0] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#0088cc]/30 flex items-center justify-between ${purchaseLoading === `TON-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
-                          onClick={() => handlePurchase(model, 'TON')}
-                          disabled={purchaseLoading === `TON-${model.id}` || !tonConnectUI.connected}
+                          className={`bg-gradient-to-r from-[#0088cc] to-[#00a2e0] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#0088cc]/30 flex items-center justify-between ${purchaseLoading === `STARS-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
+                          onClick={() => handlePurchase(model, 'STARS')}
+                          disabled={purchaseLoading === `STARS-${model.id}`}
                         >
-                           {purchaseLoading === `TON-${model.id}` ? 'İşleniyor...' : (
+                           {purchaseLoading === `STARS-${model.id}` ? 'İşleniyor...' : (
                               <>
                           <div className="flex items-center">
                                   {/* ... icon ... */}
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                             </svg>
-                                  <span>{tonConnectUI.connected ? 'TON ile Satın Al' : 'Cüzdan Bağla'}</span>
+                                  <span>Stars ile Satın Al</span>
                           </div>
-                                <span className="font-semibold">{model.ton_price}</span>
+                                <span className="font-semibold">{model.stars_price}</span>
                               </>
                             )}
                         </button>
-                        {/* Mint NFT Button */}
-                        <button 
-                          className={`bg-gradient-to-r from-[#00ff88] to-[#00cc88] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#00ff88]/30 flex items-center justify-between ${purchaseLoading === `NFT-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
-                           onClick={() => handlePurchase(model, 'NFT')}
-                           disabled={purchaseLoading === `NFT-${model.id}` || !tonConnectUI.connected}
-                        >
-                           {purchaseLoading === `NFT-${model.id}` ? 'İşleniyor...' : (
-                            <>
-                              <div className="flex items-center">
-                                  {/* ... icon ... */}
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                </svg>
-                                  <span>{tonConnectUI.connected ? 'NFT Olarak Mintle' : 'Cüzdan Bağla'}</span>
-                              </div>
-                                <span className="font-semibold">{model.nft_mint_price} TON</span>
-                            </>
-                          )}
-                        </button>
+
                       </div>
                     </div>
                   );

@@ -1,19 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
-import { Database } from '@/types/supabase'; // Assuming your auto-generated types are here
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl) {
-  console.error("Hata: NEXT_PUBLIC_SUPABASE_URL ortam değişkeni eksik");
-  // throw new Error("Supabase URL eksik"); // Veya hata fırlat
-}
-if (!supabaseKey) {
-  console.error("Hata: NEXT_PUBLIC_SUPABASE_ANON_KEY ortam değişkeni eksik");
-  // throw new Error("Supabase Anon Key eksik"); // Veya hata fırlat
-}
-
-// Tekil supabase istemcisi
-export const supabase = createClient<Database>(supabaseUrl!, supabaseKey!);
-
-console.log('[SupabaseClient] Paylaşılan istemci başlatıldı.'); 
+// The browser has no database credentials. All queries pass through the authenticated API.
+export const supabase = createClient('https://nmfp.invalid','nmfp-session-proxy',{
+ auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},
+ global:{fetch:async(input,init)=>{
+  const url = new URL(typeof input==='string'?input:input instanceof URL?input.href:input.url);
+  if (!url.pathname.startsWith('/rest/v1/')) throw new Error('Unsupported database operation.');
+  const headers = new Headers(init?.headers); headers.delete('apikey'); headers.delete('authorization');
+  return fetch(`/api/data/${url.pathname.slice('/rest/v1/'.length)}${url.search}`,{...init,headers,credentials:'same-origin'});
+ }}
+});

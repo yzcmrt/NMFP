@@ -1,4 +1,5 @@
 'use client';
+import { starsCheckout } from '@/lib/starsCheckout';
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
@@ -114,186 +115,18 @@ export default function GaragePage() {
   }, []);
 
   // Combined purchase handler
-  const handlePurchaseGarage = async (template: GarageTemplate, purchaseType: 'nmfp' | 'ton' | string) => {
-    if (!user || !user.id) {
-      toast.error('Satın alma işlemi için kullanıcı bilgisi gerekli.');
-        return;
-      }
-     if (!template || !template.id) {
-        toast.error('Geçersiz garaj şablonu bilgisi.');
-        return;
-      }
-
-    const loadingKey = `${purchaseType}-${template.id}`;
-    setPurchaseLoading(loadingKey);
-    
-    // Transaction ID'si oluştur
-    const transactionId = `garage_purchase_${template.id}_${Date.now()}`;
-    
-    const toastId = toast.loading(`${template.name} satın alınıyor...`, {
-      style: {
-        background: 'rgba(26, 26, 46, 0.95)',
-        color: '#fff',
-        border: '1px solid rgba(42, 56, 85, 0.5)'
-      }
-    });
-
+  const handlePurchase = async (template: GarageTemplate) => {
+    if(!user?.id || purchaseLoading)return;
+    setPurchaseLoading(template.id);
+    const toastId=toast.loading('Garaj satın alınıyor…');
     try {
-        let purchasePrice: number;
-        let currency: string;
-
-        // Check purchase type based on the template's property
-        if (template.purchase_type === 'nmfp') {
-            purchasePrice = template.price; // Use template.price
-            currency = 'NMFP';
-            
-            // NMFP ile garaj satın alma için optimistic update
-            addOptimisticTransaction({
-              id: transactionId,
-              amount: -purchasePrice,
-              type: 'garage_purchase',
-              description: `${template.name} garaj satın alındı`
-            });
-            
-            // Balance validation (CRITICAL SAFETY)
-            if (!validateBalance(realtimeBalance, purchasePrice, `NMFP Garage Purchase: ${template.name}`)) {
-                throw new Error(`Yetersiz ${currency}. Gerekli: ${formatCurrency(purchasePrice)}`);
-            }
-        } else if (template.purchase_type === 'ton') {
-            purchasePrice = template.price; // Use template.price
-            currency = 'TON';
-            
-            // TON cüzdanı bağlı değilse kullanıcıya toast mesajı gösterip, cüzdan bağlama işlemini başlat
-            if (!tonConnectUI.connected) {
-                toast.dismiss(toastId);
-                toast.error('TON ile satın almak için cüzdanınızı bağlayın.');
-                tonConnectUI.openModal(); // TON cüzdan bağlama modalını aç
-                setPurchaseLoading(null);
-                return;
-            }
-             
-            // Cüzdan adresini kontrol et
-            if (!tonConnectUI.account?.address) {
-                throw new Error('TON cüzdan adresi alınamadı. Lütfen bağlantıyı kontrol edip tekrar deneyin.');
-            }
-            
-            // TON transaction logic
-            const nanoTonAmount = toNano(purchasePrice.toString()).toString();
-            const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY';
-            
-            // İşlem geçerlilik süresi (20 dakika)
-            const validUntil = Math.floor(Date.now() / 1000) + 60 * 20;
-            
-            // Basitleştirilmiş işlem yapısı - payload'sız sürüm
-            const transaction = {
-                validUntil: validUntil,
-                messages: [
-                    {
-                        address: gameWalletAddress,
-                        amount: nanoTonAmount
-                        // payload alanı kaldırıldı - BOC oluşturma hatasını önlemek için
-                    }
-                ]
-            };
-            
-            toast.loading('TON işlemi onaylanıyor...', { id: toastId });
-            
-            try {
-                // İşlemi gönder ve sonucu bekle
-                const result = await tonConnectUI.sendTransaction(transaction);
-                
-                if (result && result.boc) {
-                    console.log('TON garaj satın alma işlem sonucu başarılı:', { 
-                        bocLength: result.boc.length,
-                        hasValidBoc: true
-                    });
-                    
-                    toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
-                    
-                    // 5 saniyelik bekleme süresi ekleyin - işlemin yayılması için
-                    await new Promise(resolve => setTimeout(resolve, 5000));
-                } else {
-                    console.error('TON işlemi başarısız - geçersiz boc:', result);
-                    toast.error("İşlem başarısız oldu! Geçersiz işlem sonucu.", { id: toastId });
-                    throw new Error("Geçersiz işlem sonucu");
-                }
-            } catch (txError) {
-                console.error('TON işlem gönderme hatası:', txError);
-                
-                let txErrorMessage = "İşlem gönderilemedi";
-                if (txError instanceof Error) {
-                    if (txError.message?.includes("magic")) {
-                        txErrorMessage = "İşlem oluşturulurken hata oluştu. Lütfen TON cüzdanınızı kontrol edip tekrar deneyin.";
-                    } else if (txError.message?.includes("reject") || txError.message?.includes("cancel")) {
-                        txErrorMessage = "İşlem kullanıcı tarafından iptal edildi.";
-                    } else if (txError.message?.includes("emulate")) {
-                        txErrorMessage = "İşlem simülasyonu başarısız oldu. Lütfen TON bakiyenizi kontrol edin.";
-                    }
-                }
-                
-                toast.error(txErrorMessage, { id: toastId });
-                throw new Error(txErrorMessage);
-            }
-        } else {
-            throw new Error('Bu garaj şablonu satın alınamaz veya geçersiz tip.');
-        }
-
-        toast.loading(`Sunucu ile ${currency} işlemi doğrulanıyor...`, { id: toastId });
-
-        // Call the RPC function AFTER potential TON transaction
-        // Pass template.id (string) and template.purchase_type
-        const newGarageId = await garageService.purchaseGarage(user.id, template.id, template.purchase_type);
-
-        if (newGarageId) {
-            // Transaction başarılı - optimistic update'i commit et
-            commitTransaction(transactionId);
-            
-            toast.success(`${template.name} garaj başarıyla satın alındı!`, { 
-              id: toastId,
-              style: {
-                background: 'rgba(47, 247, 193, 0.1)',
-                color: '#2ff7c1',
-                border: '1px solid rgba(47, 247, 193, 0.3)'
-              }
-            });
-            
-            // Refresh user garages list
-            const updatedGarages = await garageService.getUserGarages(user.id);
-            setUserGarages(updatedGarages);
-            setActiveTab('garages'); // Switch to my garages tab
-
-            // Real-time balance refresh (fallback)
-            await refreshBalance();
-        } else {
-            throw new Error(`Garaj satın alma işlemi başarısız oldu.`);
-        }
-
-    } catch (error: any) {
-      console.error(`${template.purchase_type} ile garaj satın alma hatası:`, error);
-      
-      // Rollback optimistic transaction (NMFP için)
-      if (template.purchase_type === 'nmfp') {
-        rollbackTransaction(transactionId);
-      }
-      
-      let errorMessage = error.message || `Garaj satın alma sırasında hata oluştu.`;
-      
-      // Specific error handling  
-      if (errorMessage.includes('Yetersiz')) {
-        errorMessage = `Yetersiz ${template.purchase_type.toUpperCase()} bakiyesi. Gerekli: ${formatCurrency(template.price)}`;
-      }
-      
-      toast.error(errorMessage, { 
-        id: toastId,
-        style: {
-          background: 'rgba(239, 68, 68, 0.1)',
-          color: '#ef4444',
-          border: '1px solid rgba(239, 68, 68, 0.3)'
-        }
-      });
-      } finally {
-      setPurchaseLoading(null);
-      }
+      if(template.purchase_type==='ton') await starsCheckout('garage',template.id);
+      else { const id=await garageService.purchaseGarage(user.id,template.id,'NMFP'); if(!id)throw new Error('Garaj satın alınamadı.'); }
+      setUserGarages(await garageService.getUserGarages(user.id));
+      await refreshBalance(); setActiveTab('garages');
+      toast.success('Garaj hesabına eklendi.',{id:toastId});
+    }catch(error){toast.error(error instanceof Error?error.message:'Satın alma tamamlanamadı.',{id:toastId});}
+    finally{setPurchaseLoading(null);}
   };
 
   // Helper to filter templates by purchase method
@@ -453,7 +286,7 @@ export default function GaragePage() {
                   onClick={() => setStoreTab('ton')}
                   className={`px-4 py-2 text-sm rounded-md ${storeTab === 'ton' ? 'bg-gradient-to-r from-[#0088cc] to-[#00a2e0] text-white' : 'text-gray-400 hover:text-white'}`}
                 >
-                  TON Garajları ({getTONGarages().length})
+                  Stars Garajları ({getTONGarages().length})
                 </button>
               </div>
             </div>
@@ -504,7 +337,7 @@ export default function GaragePage() {
                       
                       {/* Purchase Button */}
                       <button 
-                        onClick={() => handlePurchaseGarage(template, 'nmfp')}
+                        onClick={() => handlePurchase(template)}
                         disabled={purchaseLoading === `nmfp-${template.id}` || (user?.balance ?? 0) < template.price}
                         className="w-full mt-3 bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
                       >
@@ -527,7 +360,7 @@ export default function GaragePage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
-                     <p>TON ile satın alabileceğiniz özel garajlar</p>
+                     <p>Stars ile satın alabileceğiniz özel garajlar</p>
                   </div>
                 </div>
                 
@@ -549,7 +382,7 @@ export default function GaragePage() {
                       <div className="p-4">
                         <div className="flex justify-between items-center mb-3">
                         <h3 className="text-lg font-semibold text-white">{template.name}</h3>
-                        <span className="font-bold text-[#0088cc]">{formatCurrency(template.price)} TON</span>
+                        <span className="font-bold text-[#0088cc]">{template.stars_price} Stars</span>
                         </div>
                         
                       <p className="text-sm text-gray-400 mb-3">{template.description || 'Açıklama bulunmuyor.'}</p>
@@ -565,17 +398,17 @@ export default function GaragePage() {
                         
                        {/* Purchase Button */}
                         <button 
-                         onClick={() => handlePurchaseGarage(template, 'ton')}
+                         onClick={() => handlePurchase(template)}
                          disabled={purchaseLoading === `ton-${template.id}`}
                           className="w-full mt-3 bg-gradient-to-r from-[#0088cc] to-[#00a2e0] text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#0088cc]/30 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                         {purchaseLoading === `ton-${template.id}` ? "İşleniyor..." : (tonConnectUI.connected ? "TON ile Satın Al" : "Cüzdan Bağla")}
+                         {purchaseLoading === `ton-${template.id}` ? "İşleniyor..." : (tonConnectUI.connected ? "Stars ile Satın Al" : "Cüzdan Bağla")}
                         </button>
                       </div>
                     </div>
                   ))}
                  {getTONGarages().length === 0 && !isLoading && (
-                     <p className="text-center text-gray-400 py-4">Şu anda TON ile satın alınabilecek garaj yok.</p>
+                     <p className="text-center text-gray-400 py-4">Şu anda Stars ile satın alınabilecek garaj yok.</p>
                  )}
               </div>
             )}

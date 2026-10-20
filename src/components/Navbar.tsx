@@ -8,37 +8,7 @@ import { useState, useEffect } from 'react';
 const Navbar = () => {
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isGamefiSubdomain, setIsGamefiSubdomain] = useState(false);
-  const [shouldRender, setShouldRender] = useState(true);
-
-  // Client tarafında subdomain kontrolü - daha kapsamlı kontrol
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const hostname = window.location.hostname || '';
-      const currentUrl = window.location.href || '';
-      
-      // Hem hostname kontrolü hem de URL paterni kontrolü
-      const isGamefiDomain: boolean = !!(
-        hostname.startsWith('gamefi.') || 
-        hostname.includes('gamefi.needmoneyforporsche.wtf') ||
-        currentUrl.includes('gamefi.needmoneyforporsche.wtf') ||
-        (pathname && pathname.includes('/gamefi'))
-      );
-      
-      setIsGamefiSubdomain(isGamefiDomain);
-      
-      // GameFi sayfası veya subdomain ise bileşeni gizle
-      const isGamefiRoute: boolean = !!(pathname === '/gamefi' || 
-                       (pathname && pathname.startsWith('/gamefi/')));
-                       
-      setShouldRender(!(isGamefiRoute || isGamefiDomain));
-      
-      // Debug için konsola bilgileri yazdıralım
-      console.log('Hostname:', hostname);
-      console.log('Current URL:', currentUrl);
-      console.log('Is GameFi Domain:', isGamefiDomain);
-    }
-  }, [pathname]);
+  const shouldRender = !pathname?.startsWith('/gamefi');
 
   // Body overflow'u kontrol et - menü açıkken sayfanın kaymasını engelle
   useEffect(() => {

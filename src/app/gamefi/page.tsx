@@ -291,7 +291,7 @@ export default function GameFiPage() {
         // Uyarıları göster (varsa)
         if (result.warnings && result.warnings.length > 0) {
           result.warnings.forEach((warning: string) => {
-            toast.warning(warning, { duration: 5000 });
+            toast(warning, { duration: 5000 });
           });
         }
         
@@ -310,13 +310,13 @@ export default function GameFiPage() {
         if (result.warnings && result.warnings.length > 0) {
           message += ' Nedenleri:';
           result.warnings.forEach((warning: string) => {
-            toast.warning(warning, { duration: 5000 });
+            toast(warning, { duration: 5000 });
           });
         } else {
           message += ' Yakıt/kondisyon durumu veya yeterli garaj kapasitesi olup olmadığını kontrol edin.';
         }
         
-        toast.warn(message, { id: toastId, duration: 5000 });
+        toast(message, { id: toastId, duration: 5000 });
       } else {
         // Diğer hata durumları
         toast.error('Mining başlatma işlemi sırasında bir hata meydana geldi.', { id: toastId });
@@ -423,11 +423,11 @@ export default function GameFiPage() {
       {/* Ana içerik alanı */}
       <div className="space-y-5">
         {/* Otomatik Mining Bileşeni */}
-        <AutoMining onBalanceUpdate={refreshBalance} />
+        <AutoMining onBalanceUpdate={async () => { await refreshBalance(); }} />
         
         {/* Mevcut MiningArea Bileşeni */}
         <MiningArea
-          onBalanceUpdate={refreshBalance}
+          onBalanceUpdate={async () => { await refreshBalance(); }}
           currentBalance={realtimeBalance}
         />
         
@@ -455,7 +455,7 @@ export default function GameFiPage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-white">{getTransactionLabel(transaction)}</p>
-                        <p className="text-xs text-gray-400">{formatDate(transaction.created_at)}</p>
+                        <p className="text-xs text-gray-400">{formatDate(transaction.date)}</p>
                       </div>
                     </div>
                     <div className={`text-right font-medium ${getTransactionAmountClass(transaction.type)}`}>

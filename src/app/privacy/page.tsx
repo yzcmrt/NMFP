@@ -4,7 +4,7 @@ export default function Privacy() {
       <section className="text-center animate-fade-in pt-10">
         <h1 className="text-5xl font-bold mb-6 gradient-text">Privacy Policy</h1>
         <p className="text-xl text-gray-400">
-          Last updated: April 8, 2024
+          Last updated: October 20, 2026
         </p>
       </section>
 
@@ -30,7 +30,8 @@ export default function Privacy() {
               <li>Telegram username and user ID</li>
               <li>Game statistics and progress</li>
               <li>Transaction information</li>
-              <li>Communication preferences</li>
+              <li>Telegram Stars order IDs, payment identifiers and purchase status</li>
+              <li>An optional connected wallet address, if you choose to save it</li>
             </ul>
           </div>
 
@@ -75,7 +76,7 @@ export default function Privacy() {
       <section className="blur-bg p-8 rounded-lg">
         <h2 className="text-2xl font-bold mb-4">Third-Party Services</h2>
         <p className="text-gray-300 mb-4">
-          Our service may contain links to other sites that are not operated by us. If you click on a third-party link, you will be directed to that third party&apos;s site. We strongly advise you to review the Privacy Policy of every site you visit.
+          The game uses Telegram for authentication and Stars payments, Supabase for game data, Vercel for hosting, and Web3Forms for messages submitted through the contact form. An essential HttpOnly session cookie expires after 12 hours. Our service may also contain links to other sites that are not operated by us. If you click on a third-party link, you will be directed to that third party&apos;s site. We strongly advise you to review the Privacy Policy of every site you visit.
         </p>
         <p className="text-gray-300">
           We have no control over and assume no responsibility for the content, privacy policies, or practices of any third-party sites or services.

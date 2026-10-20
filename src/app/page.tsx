@@ -9,7 +9,7 @@ export default function Home() {
           Need Money For Porsche
         </h1>
         <p className="text-xl md:text-2xl text-gray-400 max-w-3xl mx-auto mb-10">
-          The most exciting Telegram game where strategy meets fortune. Play, earn, and buy your dream Porsche.
+          Build your virtual garage in Telegram. Manage cars, collect in-game NMFP points and expand your collection.
         </p>
         <div className="flex flex-col sm:flex-row justify-center gap-4">
           <Link 
@@ -32,7 +32,7 @@ export default function Home() {
         <div className="space-y-6 blur-bg p-6">
           <h2 className="text-3xl font-bold gradient-text">Simple, Strategic Gameplay</h2>
           <p className="text-gray-400">
-            Our game combines simplicity with deep strategy. Make the right moves, time your actions perfectly, and watch your fortunes grow in real-time.
+            Our game combines simplicity with deep strategy. Make the right moves, time your actions perfectly, and grow your garage over time.
           </p>
           <ul className="space-y-3">
             <li className="flex items-start">
@@ -51,14 +51,14 @@ export default function Home() {
               <svg className="h-6 w-6 text-purple-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              <span>Competitive leaderboards</span>
+              <span>Personal mining statistics</span>
             </li>
           </ul>
         </div>
         <div className="space-y-6 blur-bg p-6">
-          <h2 className="text-3xl font-bold gradient-text">Play to Earn</h2>
+          <h2 className="text-3xl font-bold gradient-text">Build Your Collection</h2>
           <p className="text-gray-400">
-            Every game is an opportunity to increase your earnings. Climb the ranks, unlock achievements, and grow your assets with each successful move.
+            Send your cars on eight-hour mining sessions, maintain their fuel and condition, and spend the points you collect inside the game.
           </p>
           <ul className="space-y-3">
             <li className="flex items-start">
@@ -77,25 +77,17 @@ export default function Home() {
               <svg className="h-6 w-6 text-purple-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
-              <span>Special events with massive prizes</span>
+              <span>Optional upgrades with Telegram Stars</span>
             </li>
           </ul>
         </div>
-      </section>
-
-      {/* Testimonial */}
-      <section className="text-center py-16 border-y border-zinc-800 animate-pulse-slow">
-        <blockquote className="text-2xl md:text-3xl font-light italic max-w-4xl mx-auto">
-          &quot;Need Money For Porsche changed my gaming experience. The strategic depth combined with the exciting rewards keeps me coming back for more.&quot;
-        </blockquote>
-        <p className="mt-6 text-lg text-gray-400">— Top Player</p>
       </section>
 
       {/* CTA Section */}
       <section className="text-center py-16">
         <h2 className="text-4xl font-bold mb-6 gradient-text">Ready to Start Your Journey?</h2>
         <p className="text-xl text-gray-400 max-w-3xl mx-auto mb-10">
-          Join thousands of players already on their way to earning their dream Porsche.
+          Start with a free virtual car and garage. NMFP points have no cash value and cannot be withdrawn.
         </p>
         <Link 
           href="/play" 

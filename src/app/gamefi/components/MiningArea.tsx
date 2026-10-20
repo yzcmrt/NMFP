@@ -494,8 +494,8 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
     } catch (err) {
       console.error('[MiningArea] Mining tamamlama hatası:', err);
       console.error('[MiningArea] Error details:', {
-        message: err.message,
-        stack: err.stack,
+        message: (err instanceof Error ? err.message : String(err)),
+        stack: (err instanceof Error ? err.stack : undefined),
         sessionId,
         transactionId: transactionId // Bu artık scope'da olmalı
       });
@@ -727,29 +727,29 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       // Hata mesajını daha anlaşılır yap
       let errorMessage = 'Mining başlatılırken bir hata oluştu.';
       
-      if (err.message) {
+      if ((err instanceof Error ? err.message : String(err))) {
         // Bilinen hata mesajlarını kontrol et
-        if (err.message.includes('bulunamadi') || err.message.includes('not found')) {
+        if ((err instanceof Error ? err.message : String(err)).includes('bulunamadi') || (err instanceof Error ? err.message : String(err)).includes('not found')) {
           errorMessage = 'Araç bulunamadı veya bu kullanıcıya ait değil.';
         }
-        else if (err.message.includes('zaten mining')) {
+        else if ((err instanceof Error ? err.message : String(err)).includes('zaten mining')) {
           errorMessage = 'Bu araç zaten mining yapıyor!';
         }
-        else if (err.message.includes('garaj kapasitesi') || err.message.includes('garage capacity')) {
+        else if ((err instanceof Error ? err.message : String(err)).includes('garaj kapasitesi') || (err instanceof Error ? err.message : String(err)).includes('garage capacity')) {
           errorMessage = 'Garaj kapasitesi dolu! Yeni garaj satın alın veya mevcut mining işlemlerini tamamlayın.';
         }
-        else if (err.message.includes('yakit') || err.message.includes('fuel')) {
+        else if ((err instanceof Error ? err.message : String(err)).includes('yakit') || (err instanceof Error ? err.message : String(err)).includes('fuel')) {
           errorMessage = 'Araçta yeterli yakıt yok.';
         }
-        else if (err.message.includes('kondisyon') || err.message.includes('condition')) {
+        else if ((err instanceof Error ? err.message : String(err)).includes('kondisyon') || (err instanceof Error ? err.message : String(err)).includes('condition')) {
           errorMessage = 'Araç kondisyonu mining için uygun değil.';
         }
-        else if (err.message.includes('uygun degil') || err.message.includes('not suitable')) {
+        else if ((err instanceof Error ? err.message : String(err)).includes('uygun degil') || (err instanceof Error ? err.message : String(err)).includes('not suitable')) {
           errorMessage = 'Araç mining için uygun durumda değil.';
         }
         else {
           // Diğer hataları aynen göster
-          errorMessage = err.message;
+          errorMessage = (err instanceof Error ? err.message : String(err));
         }
       }
       

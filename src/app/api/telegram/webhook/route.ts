@@ -1,201 +1,43 @@
-import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
-
-// Güvenlik için doğrulama fonksiyonu
-const verifyTelegramWebhook = (data: any, botToken: string): boolean => {
-  // Telegram bot tokenini kontrol et
-  if (!botToken || botToken.length < 10) {
-    console.error('BOT_TOKEN eksik veya geçersiz');
-    return false;
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { errorResponse,HttpError } from '@/server/auth';
+import { database } from '@/server/db';
+import { telegram } from '@/server/telegram';
+import { validPreCheckout } from '@/server/paymentChecks';
+export async function POST(request:Request) {
+ try {
+  const secret=process.env.TELEGRAM_WEBHOOK_SECRET || '',received=request.headers.get('x-telegram-bot-api-secret-token') || '';
+  if(!secret || !timingSafeEqual(createHash('sha256').update(secret).digest(),createHash('sha256').update(received).digest()))throw new HttpError(401,'Invalid webhook.');
+  const update=await request.json(), db=database();
+  if(update.pre_checkout_query) {
+   const q=update.pre_checkout_query;
+   const {data:o,error}=await db.from('star_orders').select('*,users!inner(telegram_id)').eq('id',q.invoice_payload).maybeSingle();
+   let ok=!error && validPreCheckout(o?{...o,telegram_id:o.users.telegram_id}:null,{currency:q.currency,total_amount:q.total_amount,telegram_id:String(q.from.id)});
+   if(ok && o.kind!=='premium') {
+    const {count,error:ownedError}=await db.from(o.kind==='car'?'user_cars':'garages').select('id',{count:'exact',head:true}).eq('user_id',o.user_id).eq(o.kind==='car'?'car_model_id':'template_id',o.product_id);
+    ok=!ownedError && !count;
+   }
+   await telegram('answerPreCheckoutQuery',{pre_checkout_query_id:q.id,ok:Boolean(ok),...(!ok?{error_message:'This order is unavailable or has expired. Please reopen checkout.'}:{})});
   }
-
-  // Burada daha detaylı doğrulama yapabilirsiniz
-  // Örnek: Telegram'dan gelen bir başlık veya token kontrolü
-  
-  return true;
-};
-
-export async function POST(request: Request) {
-  try {
-    // Bot tokenini al
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    if (!botToken) {
-      return NextResponse.json(
-        { success: false, message: 'Bot token eksik' },
-        { status: 401 }
-      );
+  const message=update.message,payment=message?.successful_payment;
+  if(payment) {
+   if(payment.currency!=='XTR')throw new HttpError(400,'Unsupported payment currency.');
+   const {data:delivery,error}=await db.rpc('nmfp_fulfill_star_order',{p_order_id:payment.invoice_payload,p_telegram_id:String(message.from.id),p_charge_id:payment.telegram_payment_charge_id,p_amount:payment.total_amount});
+   // Transient failures return 500 so Telegram retries. Never silently acknowledge an undelivered purchase.
+   if(error)throw new Error('Stars fulfillment failed; Telegram will retry delivery.');
+   if(delivery?.refund_required) {
+    try { await telegram('refundStarPayment',{user_id:message.from.id,telegram_payment_charge_id:payment.telegram_payment_charge_id}); } catch(error) {
+     if(!(error instanceof Error && error.message.includes('CHARGE_ALREADY_REFUNDED'))) throw error;
     }
-
-    // Webhook verilerini al
-    const webhookData = await request.json();
-    console.log('Gelen Telegram webhook verisi:', webhookData);
-
-    // Webhook doğrulama
-    if (!verifyTelegramWebhook(webhookData, botToken)) {
-      return NextResponse.json(
-        { success: false, message: 'Webhook doğrulanamadı' },
-        { status: 401 }
-      );
-    }
-
-    // Mesaj veya callback_query'i kontrol et
-    if (webhookData.message) {
-      return handleTelegramMessage(webhookData.message);
-    } else if (webhookData.callback_query) {
-      return handleTelegramCallback(webhookData.callback_query);
-    }
-
-    // Ne mesaj ne de callback yoksa
-    return NextResponse.json({ success: true, message: 'İşlenecek veri bulunamadı' });
-  } catch (error: any) {
-    console.error('Telegram webhook hatası:', error);
-    return NextResponse.json(
-      { success: false, message: error.message || 'Bilinmeyen hata' },
-      { status: 500 }
-    );
+    const {error:refundError}=await db.from('star_orders').update({status:'refunded'}).eq('id',payment.invoice_payload).eq('telegram_charge_id',payment.telegram_payment_charge_id).eq('status','refund_pending');
+    if(refundError) throw new Error('Refund record could not be updated.');
+   }
   }
+  const command=message?.text?.split(/\s/)[0]?.split('@')[0];
+  const site=process.env.NEXT_PUBLIC_SITE_URL || 'https://nmfp.vercel.app';
+  if(message?.chat?.type==='private' && command && !payment) {
+   if(command==='/start' || command==='/play')return Response.json({method:'sendMessage',chat_id:message.chat.id,text:'Welcome to NMFP. Build your garage and earn in-game NMFP points.',reply_markup:{inline_keyboard:[[{text:'Open your garage',web_app:{url:`${site}/gamefi`}}]]}});
+   if(['/support','/paysupport','/terms'].includes(command))return Response.json({method:'sendMessage',chat_id:message.chat.id,text:command==='/terms'?`Purchase terms: ${site}/terms`:`For game and payment support, use ${site}/support. Include your order ID; never send passwords or wallet recovery words.`});
+  }
+  return Response.json({ok:true});
+ }catch(error){return errorResponse(error);}
 }
-
-// Telegram mesajlarını işle (komutlar için)
-async function handleTelegramMessage(message: any) {
-  const { text, from, chat } = message;
-  
-  // Komut olmayan mesajları atla
-  if (!text || !text.startsWith('/')) {
-    return NextResponse.json({ success: true, message: 'Komut değil' });
-  }
-
-  // Komut ve parametreleri ayır
-  const [command, ...args] = text.split(' ');
-  const commandLower = command.toLowerCase();
-
-  // /start task_XXX komutunu işle
-  if (commandLower === '/start' && args.length > 0 && args[0].startsWith('task_')) {
-    const taskId = parseInt(args[0].replace('task_', ''), 10);
-    const telegramId = from.id.toString();
-    
-    if (isNaN(taskId)) {
-      return NextResponse.json({ success: false, message: 'Geçersiz görev ID' });
-    }
-    
-    try {
-      // Telegram ID'ye göre kullanıcıyı bul
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('telegram_id', telegramId)
-        .single();
-      
-      if (userError || !userData) {
-        console.error('Kullanıcı bulunamadı:', userError);
-        return NextResponse.json({ success: false, message: 'Kullanıcı bulunamadı' });
-      }
-      
-      // Görevi doğrula
-      const { data: verifyResult, error: verifyError } = await supabase.rpc(
-        'verify_telegram_task',
-        {
-          p_user_id: userData.id,
-          p_telegram_id: telegramId,
-          p_task_id: taskId
-        }
-      );
-      
-      if (verifyError) {
-        console.error('Görev doğrulama hatası:', verifyError);
-        return NextResponse.json({ success: false, message: 'Görev doğrulanamadı' });
-      }
-      
-      console.log('Görev doğrulama sonucu:', verifyResult);
-      
-      // Kullanıcıya mesaj gönder
-      // Bu kısım Telegram Bot API ile gerçekleştirilebilir
-      
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Görev işlendi', 
-        result: verifyResult 
-      });
-    } catch (error: any) {
-      console.error('Görev işleme hatası:', error);
-      return NextResponse.json(
-        { success: false, message: error.message || 'Görev işlenirken hata oluştu' },
-        { status: 500 }
-      );
-    }
-  }
-  
-  // Diğer komutlar...
-  
-  return NextResponse.json({ success: true, message: 'Komut işlendi' });
-}
-
-// Telegram callback query'leri işle (inline butonlar için)
-async function handleTelegramCallback(callbackQuery: any) {
-  const { data, from } = callbackQuery;
-  
-  // Veri yoksa atla
-  if (!data) {
-    return NextResponse.json({ success: true, message: 'İşlenecek callback verisi yok' });
-  }
-  
-  // Görev callback'leri (örnek: task_verify_XXX)
-  if (data.startsWith('task_verify_')) {
-    const taskId = parseInt(data.replace('task_verify_', ''), 10);
-    const telegramId = from.id.toString();
-    
-    if (isNaN(taskId)) {
-      return NextResponse.json({ success: false, message: 'Geçersiz görev ID' });
-    }
-    
-    try {
-      // Telegram ID'ye göre kullanıcıyı bul
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('id')
-        .eq('telegram_id', telegramId)
-        .single();
-      
-      if (userError || !userData) {
-        console.error('Kullanıcı bulunamadı:', userError);
-        return NextResponse.json({ success: false, message: 'Kullanıcı bulunamadı' });
-      }
-      
-      // Görevi doğrula
-      const { data: verifyResult, error: verifyError } = await supabase.rpc(
-        'verify_telegram_task',
-        {
-          p_user_id: userData.id,
-          p_telegram_id: telegramId,
-          p_task_id: taskId
-        }
-      );
-      
-      if (verifyError) {
-        console.error('Görev doğrulama hatası:', verifyError);
-        return NextResponse.json({ success: false, message: 'Görev doğrulanamadı' });
-      }
-      
-      // Callback cevabı
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Görev doğrulandı', 
-        result: verifyResult,
-        callback_response: {
-          callback_query_id: callbackQuery.id,
-          text: verifyResult.success 
-            ? `✅ Görev tamamlandı! ${verifyResult.reward} NMFP kazandınız.` 
-            : `❌ ${verifyResult.message || 'Görev doğrulanamadı'}`
-        }
-      });
-    } catch (error: any) {
-      console.error('Callback işleme hatası:', error);
-      return NextResponse.json(
-        { success: false, message: error.message || 'Callback işlenirken hata oluştu' },
-        { status: 500 }
-      );
-    }
-  }
-  
-  return NextResponse.json({ success: true, message: 'Callback işlendi' });
-} 
