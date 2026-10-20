@@ -14,6 +14,7 @@ test('malformed user and hash rejected',()=>{assert.throws(()=>validateTelegramD
 process.env.SESSION_SECRET='test-only-session-secret-longer-than-32-characters';
 const session={userId:'00000000-0000-4000-8000-000000000001',telegramId:'12345',exp:Math.floor(Date.now()/1000)+60};
 const req=(cookie:string)=>new Request('https://nmfp.vercel.app/api/data/users',{headers:{cookie:'nmfp_session='+cookie}});
-test('session round-trip and HttpOnly cookie',()=>{assert.deepEqual(readSession(req(signSession(session))),session);assert.match(sessionCookie(session),/HttpOnly; SameSite=Lax/);});
+test('session round-trip and HttpOnly cookie',()=>{assert.deepEqual(readSession(req(signSession(session))),session);assert.match(sessionCookie(session),/HttpOnly/);});
 test('modified, expired and absent session rejected',()=>{assert.throws(()=>readSession(req(signSession(session)+'x')));assert.throws(()=>readSession(req(signSession({...session,exp:1}))));assert.throws(()=>readSession(req('')));});
 test('cross-origin writes and absent origin rejected',()=>{for(const origin of ['https://evil.example','null',''])assert.throws(()=>checkOrigin(new Request('https://nmfp.vercel.app/api/stars/invoice',{headers:{origin}})));checkOrigin(new Request('https://nmfp.vercel.app/api/stars/invoice',{headers:{origin:'https://nmfp.vercel.app'}}));});
+test('production session supports embedded Telegram webviews with secure partitioned cookie',()=>{const before=process.env.NODE_ENV;process.env.NODE_ENV='production';try{assert.match(sessionCookie(session),/SameSite=None; Secure; Partitioned/);}finally{if(before===undefined)delete process.env.NODE_ENV;else process.env.NODE_ENV=before;}});

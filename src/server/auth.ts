@@ -51,7 +51,7 @@ export function checkOrigin(request: Request) {
   if (!origin || (origin !== expected && origin !== site)) throw new HttpError(403, 'Request origin is not allowed.');
 }
 export function sessionCookie(session: Session) {
-  return `${cookieName}=${signSession(session)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=43200${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
+  return `${cookieName}=${signSession(session)}; HttpOnly; Path=/; Max-Age=43200${process.env.NODE_ENV === 'production' ? '; SameSite=None; Secure; Partitioned' : '; SameSite=Lax'}`;
 }
 export function errorResponse(error: unknown) {
   const status = error instanceof HttpError ? error.status : 500;
