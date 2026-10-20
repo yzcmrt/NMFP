@@ -1,5 +1,7 @@
 'use client';
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
 import type { User } from '@/types';
 interface TelegramUser { id: number; first_name: string; username?: string; photo_url?: string; is_premium?: boolean; }
 interface Context { user: User | null; telegramUser: TelegramUser | null; isLoading: boolean; error: string | null; rawInitData: string | null; parsedInitData: any; refreshUserData: () => Promise<void>; }
@@ -46,5 +48,10 @@ export default function TelegramInitProvider({ children }: { children: ReactNode
     return () => { clearInterval(timer); window.removeEventListener('focus', refresh); };
   }, [user?.id, refreshUserData]);
   const context = { user, telegramUser, isLoading, error, rawInitData: null, parsedInitData: null, refreshUserData };
-  return <TelegramContext.Provider value={context}>{isLoading ? <div role="status" className="min-h-dvh bg-black text-white grid place-items-center">Connecting to your garage…</div> : error ? <div className="min-h-dvh bg-black text-white flex flex-col justify-center items-center p-8 text-center gap-6"><h1 className="text-3xl font-bold">Your garage awaits.</h1><p className="text-zinc-400 max-w-sm">{error}</p><a className="bg-yellow-400 text-black font-bold px-6 py-3 rounded-xl" href="https://t.me/NMFP_bot">Open in Telegram</a><button onClick={() => location.reload()} className="text-sm underline">Try again</button></div> : children}</TelegramContext.Provider>;
+  return <TelegramContext.Provider value={context}>{isLoading || error ? <div className="garage-gate">
+    <Image src="/cars/garage/garaj-10.jpg" alt="" fill priority sizes="100vw" className="gate-background" />
+    <div className="gate-panel"><Link href="/" className="wordmark">N<span> / </span>MFP</Link><p className="eyebrow">CYBER GARAGE // ACCESS TERMINAL</p><h1>Your night<br/>shift awaits<span className="cursor-mark">_</span></h1>
+    {isLoading ? <p role="status" className="gate-status"><span className="status-dot" />Connecting to your garage…</p> : <><p className="muted">{error}</p><a className="cyber-button" href="https://t.me/NMFP_bot">OPEN IN TELEGRAM ↗</a><button onClick={()=>location.reload()} className="gate-retry">Try again ↻</button></>}
+    <p className="gate-footnote">Your Telegram account keeps your garage and progress together.</p></div>
+  </div> : children}</TelegramContext.Provider>;
 }

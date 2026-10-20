@@ -137,7 +137,7 @@ export default function GaragePage() {
    if (isUserLoading || (isLoading && (!userGarages.length || !availableTemplates.length))) {
      return (
        <div className="flex items-center justify-center min-h-[300px]">
-         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#7b2ff7]"></div>
+         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#43c9d6]"></div>
        </div>
      );
    }
@@ -148,7 +148,7 @@ export default function GaragePage() {
          <p className="text-red-500">{userError || error}</p>
          <button
            onClick={() => window.location.reload()}
-           className="mt-3 bg-[#7b2ff7] text-white px-4 py-2 rounded-lg"
+           className="mt-3 bg-[#43c9d6] text-white px-4 py-2 rounded-lg"
          >
            Yeniden Dene
          </button>
@@ -168,15 +168,15 @@ export default function GaragePage() {
     <div className="pb-12">
       {/* Sayfa Başlığı */}
       <div className="mobile-app-header relative mb-6">
-        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#7b2ff7] via-[#2f7bf7] to-[#2ff7c1] opacity-80"></div>
-        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">Garaj Yönetimi</h1>
+        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#43c9d6] via-[#216b9c] to-[#2ff7c1] opacity-80"></div>
+        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">Garaj Yönetimi</h1>
       </div>
       
       <div className="space-y-5">
         {/* Tabs */}
-        <div className="flex justify-between bg-gradient-to-r from-[#1a1a2e] via-[#16213e] to-[#0f3460] rounded-xl p-1.5 shadow-lg border border-[#2a3855]">
+        <div className="flex justify-between bg-gradient-to-r from-[#101b23] via-[#14242d] to-[#0f3460] rounded-xl p-1.5 shadow-lg border border-[#31505b]">
           <button
-            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'garages' ? 'bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#16213e]/80'}`}
+            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'garages' ? 'bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#14242d]/80'}`}
             onClick={() => setActiveTab('garages')}
           >
             <div className="flex items-center justify-center space-x-2">
@@ -187,7 +187,7 @@ export default function GaragePage() {
             </div>
           </button>
           <button
-            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'store' ? 'bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#16213e]/80'}`}
+            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'store' ? 'bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#14242d]/80'}`}
             onClick={() => setActiveTab('store')}
           >
             <div className="flex items-center justify-center space-x-2">
@@ -206,9 +206,9 @@ export default function GaragePage() {
                  <p className="text-center text-gray-400 py-4">Henüz hiç garajınız yok. Pazar sekmesinden yeni garajlar edinebilirsiniz.</p>
              )}
             {userGarages.map(garage => (
-              <div key={garage.id} className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-xl overflow-hidden border border-[#2a3855] transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/20">
+              <div key={garage.id} className="bg-gradient-to-r from-[#0f3460] to-[#101b23] rounded-xl overflow-hidden border border-[#31505b] transition-all duration-300 hover:shadow-lg hover:shadow-[#43c9d6]/20">
                 {/* Garage Image */}
-                <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#16213e] to-[#0f3460]">
+                <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#14242d] to-[#0f3460]">
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0f3460] to-transparent opacity-30 z-10"></div>
                   {garage.image_url && (
                     <Image
@@ -237,13 +237,13 @@ export default function GaragePage() {
                   
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     {/* Capacity */}
-                    <div className="bg-[#1a1a2e] p-3 rounded-lg border border-[#2a3855]/50">
+                    <div className="bg-[#101b23] p-3 rounded-lg border border-[#31505b]/50">
                       <p className="text-xs text-gray-400">Kapasite</p>
                        {/* occupied needs to be calculated/fetched if needed */}
                       <p className="font-medium text-white">?/{garage.capacity}</p>
                     </div>
                     {/* Daily Bonus */}
-                    <div className="bg-[#1a1a2e] p-3 rounded-lg border border-[#2a3855]/50">
+                    <div className="bg-[#101b23] p-3 rounded-lg border border-[#31505b]/50">
                       <p className="text-xs text-gray-400">Günlük Bonus</p>
                       <p className="font-medium text-[#2ff7c1]">+{formatCurrency(garage.daily_bonus ?? 0)}</p>
                     </div>
@@ -256,7 +256,7 @@ export default function GaragePage() {
                        <div className="w-3 h-3 rounded-full bg-yellow-500 animate-pulse mr-2"></div>
                        <span className="text-sm text-yellow-500">Bonus Bekleniyor</span>
                     </div>
-                    <button className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30">
+                    <button className="bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#43c9d6]/30">
                       Bonusu Topla
                     </button>
                   </div>
@@ -269,16 +269,16 @@ export default function GaragePage() {
           <div className="space-y-6">
             {/* Store Header */}
             <div className="text-center mt-4 mb-6">
-              <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white">Garaj Pazarı</h2>
+              <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white">Garaj Pazarı</h2>
               <p className="text-gray-400 mt-2">Yeni garajlar satın alarak araç koleksiyonunuzu genişletin!</p>
             </div>
             
             {/* Store Sub-Tabs (NMFP/TON) */}
             <div className="flex justify-center mb-6">
-              <div className="inline-flex rounded-md shadow-sm p-1 bg-[#1a1a2e] border border-[#2a3855]">
+              <div className="inline-flex rounded-md shadow-sm p-1 bg-[#101b23] border border-[#31505b]">
                 <button
                   onClick={() => setStoreTab('nmfp')}
-                  className={`px-4 py-2 text-sm rounded-md ${storeTab === 'nmfp' ? 'bg-gradient-to-r from-[#7b2ff7] to-[#5f40f8] text-white' : 'text-gray-400 hover:text-white'}`}
+                  className={`px-4 py-2 text-sm rounded-md ${storeTab === 'nmfp' ? 'bg-gradient-to-r from-[#43c9d6] to-[#176e91] text-white' : 'text-gray-400 hover:text-white'}`}
                 >
                   NMFP Garajları ({getNMFPGarages().length})
                 </button>
@@ -294,7 +294,7 @@ export default function GaragePage() {
             {/* NMFP Templates */} 
             {storeTab === 'nmfp' && (
               <div className="space-y-6">
-                <div className="p-4 bg-[#1a1a2e]/50 rounded-lg border border-[#2a3855] mb-4">
+                <div className="p-4 bg-[#101b23]/50 rounded-lg border border-[#31505b] mb-4">
                   <div className="flex items-center gap-2 text-sm text-[#2ff7c1]">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
@@ -304,9 +304,9 @@ export default function GaragePage() {
                 </div>
                 
                 {getNMFPGarages().map((template: GarageTemplate) => (
-                  <div key={template.id} className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-xl overflow-hidden border border-[#2a3855] transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/20">
+                  <div key={template.id} className="bg-gradient-to-r from-[#0f3460] to-[#101b23] rounded-xl overflow-hidden border border-[#31505b] transition-all duration-300 hover:shadow-lg hover:shadow-[#43c9d6]/20">
                     {/* Template Image */}
-                    <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#16213e] to-[#0f3460]">
+                    <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#14242d] to-[#0f3460]">
                       <div className="absolute inset-0 bg-gradient-to-t from-[#0f3460]/60 to-transparent opacity-30 z-10"></div>
                       <Image
                         src={template.image || '/placeholder-garage.png'}
@@ -321,7 +321,7 @@ export default function GaragePage() {
                     <div className="p-4">
                       <div className="flex justify-between items-center mb-3">
                         <h3 className="text-lg font-semibold text-white">{template.name}</h3>
-                        <span className="font-bold text-[#7b2ff7]">{formatCurrency(template.price)} NMFP</span>
+                        <span className="font-bold text-[#43c9d6]">{formatCurrency(template.price)} NMFP</span>
                       </div>
                       
                       <p className="text-sm text-gray-400 mb-3">{template.description || 'Açıklama bulunmuyor.'}</p>
@@ -339,7 +339,7 @@ export default function GaragePage() {
                       <button 
                         onClick={() => handlePurchase(template)}
                         disabled={purchaseLoading === `nmfp-${template.id}` || (user?.balance ?? 0) < template.price}
-                        className="w-full mt-3 bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                        className="w-full mt-3 bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#43c9d6]/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
                       >
                          {purchaseLoading === `nmfp-${template.id}` ? "İşlem yapılıyor..." : "NMFP ile Satın Al"}
                       </button>

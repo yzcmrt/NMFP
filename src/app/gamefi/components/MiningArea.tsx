@@ -931,9 +931,9 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
     <MiningErrorBoundary>
     <div className="space-y-4">
       {/* Bakım ve Yakıt Özeti */}
-      <div className="bg-[#1a1a2e]/70 rounded-xl p-4 shadow-md border border-[#2a3855]/50">
+      <div className="bg-[#101b23]/70 rounded-xl p-4 shadow-md border border-[#31505b]/50">
         <div className="flex justify-between items-center mb-3">
-          <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#7b2ff7]">
+          <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#43c9d6]">
             Araç Durumu ve Bakım
           </h3>
           <div className="flex items-center gap-2">
@@ -943,11 +943,11 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
         </div>
         
         <div className="grid grid-cols-2 gap-3 mb-3">
-          <div className="bg-[#16213e]/70 p-3 rounded-lg">
+          <div className="bg-[#14242d]/70 p-3 rounded-lg">
             <p className="text-xs text-gray-400 mb-1">Bakım Maliyeti</p>
             <p className="text-xl font-bold text-orange-400">{formatCurrency(totalMaintenanceCost)}</p>
           </div>
-          <div className="bg-[#16213e]/70 p-3 rounded-lg">
+          <div className="bg-[#14242d]/70 p-3 rounded-lg">
             <p className="text-xs text-gray-400 mb-1">Yakıt Maliyeti</p>
             <p className="text-xl font-bold text-blue-400">{formatCurrency(totalFuelCost)}</p>
           </div>
@@ -965,12 +965,12 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       </div>
       
       {/* Garaj Kapasitesi */}
-      <div className="bg-[#1a1a2e]/70 rounded-xl p-4 shadow-md border border-[#2a3855]/50">
-        <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#7b2ff7] mb-3">
+      <div className="bg-[#101b23]/70 rounded-xl p-4 shadow-md border border-[#31505b]/50">
+        <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#43c9d6] mb-3">
           Garaj Kapasitesi
         </h3>
         
-        <div className="bg-[#16213e]/70 p-4 rounded-lg">
+        <div className="bg-[#14242d]/70 p-4 rounded-lg">
           <div className="flex justify-between text-xs text-gray-400 mb-2">
             <span>Toplam Garaj Kapasitesi:</span>
             <span>{userGarages.reduce((total, garage) => total + garage.capacity, 0)}</span>
@@ -988,13 +988,13 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       
       
       {/* Araç Listesi */}
-      <div className="bg-[#1a1a2e]/70 rounded-xl p-4 shadow-md border border-[#2a3855]/50">
+      <div className="bg-[#101b23]/70 rounded-xl p-4 shadow-md border border-[#31505b]/50">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#7b2ff7]">
+          <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#43c9d6]">
             Araçlarım
           </h3>
           <div className="text-xs text-gray-400">
-            Dinamik Mining Butonları Aktif
+            8 SAATLİK TURLAR
           </div>
         </div>
         
@@ -1014,11 +1014,11 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
               }
               
               return (
-                <div key={car.id} className={`bg-[#16213e]/70 p-4 rounded-lg ${isMining ? 'border border-[#2ff7c1]/30' : ''}`}>
+                <div key={car.id} className={`bg-[#14242d]/70 p-4 rounded-lg ${isMining ? 'border border-[#2ff7c1]/30' : ''}`}>
                   {/* Araç üst bilgisi */}
                   <div className="flex justify-between items-center mb-3">
                   <div className="flex items-center gap-2">
-                      <div className="w-12 h-12 bg-[#1a1a2e] rounded-md flex items-center justify-center">
+                      <div className="w-12 h-12 bg-[#101b23] rounded-md flex items-center justify-center">
                         <span className="text-lg font-bold">{car.name?.substring(0, 1)}</span>
                     </div>
                     <div>
@@ -1030,7 +1030,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
                           
                           {/* Mining yapıyorsa kalan süreyi göster */}
                           {isMining && miningSession && miningSession.status === MiningStatus.ACTIVE && (
-                            <span className="flex items-center bg-[#1a1a2e] px-2 py-0.5 rounded text-[#2ff7c1]">
+                            <span className="flex items-center bg-[#101b23] px-2 py-0.5 rounded text-[#2ff7c1]">
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
@@ -1042,11 +1042,11 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
                     </div>
                     <div className="flex items-center gap-2">
                       {/* Durum göstergeleri */}
-                      <div className="flex items-center gap-2 bg-[#1a1a2e] p-1.5 rounded">
+                      <div className="flex items-center gap-2 bg-[#101b23] p-1.5 rounded">
                         <div className="flex flex-col items-center">
                         <div className="w-1.5 h-6 bg-gradient-to-b from-orange-400 to-orange-600 rounded-full overflow-hidden">
                           <div 
-                            className="w-full bg-[#16213e]/70" 
+                            className="w-full bg-[#14242d]/70" 
                             style={{ height: `${100 - car.condition}%` }}
                           ></div>
                         </div>
@@ -1055,7 +1055,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
                         <div className="flex flex-col items-center">
                         <div className="w-1.5 h-6 bg-gradient-to-b from-blue-400 to-blue-600 rounded-full overflow-hidden">
                           <div 
-                            className="w-full bg-[#16213e]/70" 
+                            className="w-full bg-[#14242d]/70" 
                             style={{ height: `${100 - car.fuel}%` }}
                           ></div>
                           </div>
@@ -1066,15 +1066,15 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
                 </div>
                 
                   {/* Artık her zaman görünür olacak detay alanı */}
-                  <div className="pt-3 border-t border-[#2a3855]/30">
+                  <div className="pt-3 border-t border-[#31505b]/30">
                     <div className="grid grid-cols-2 gap-4 mb-3">
-                      <div className="bg-[#1a1a2e]/70 p-2 rounded-lg">
+                      <div className="bg-[#101b23]/70 p-2 rounded-lg">
                         <p className="text-xs text-gray-400 mb-1">Mining Gücü</p>
                         <p className="text-sm font-medium text-[#2ff7c1]">{formatNumber(car.car_model?.mining_power || 0)}</p>
                       </div>
-                      <div className="bg-[#1a1a2e]/70 p-2 rounded-lg">
+                      <div className="bg-[#101b23]/70 p-2 rounded-lg">
                         <p className="text-xs text-gray-400 mb-1">8 Saatlik Kazanç</p>
-                        <p className="text-sm font-medium text-[#7b2ff7]">
+                        <p className="text-sm font-medium text-[#43c9d6]">
                           {formatCurrency(calculateMiningReward(car.car_model?.mining_power || 0, 8))} NMFP
                         </p>
                       </div>
@@ -1149,12 +1149,12 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
       </div>
       
       {/* Toplam Mining Gücü */}
-      <div className="bg-[#1a1a2e]/70 rounded-xl p-4 shadow-md border border-[#2a3855]/50">
-        <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#7b2ff7] mb-3">
+      <div className="bg-[#101b23]/70 rounded-xl p-4 shadow-md border border-[#31505b]/50">
+        <h3 className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-[#43c9d6] mb-3">
           Mining Gücü
         </h3>
         
-        <div className="bg-[#16213e]/70 p-4 rounded-lg">
+        <div className="bg-[#14242d]/70 p-4 rounded-lg">
           <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Toplam Mining Gücü</p>
@@ -1162,7 +1162,7 @@ export default function MiningArea({ onBalanceUpdate, currentBalance }: MiningAr
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 mb-1">8 Saatlik Tahmin</p>
-                  <p className="text-xl font-bold text-[#7b2ff7]">{formatCurrency(totalEstimatedReward)}</p>
+                  <p className="text-xl font-bold text-[#43c9d6]">{formatCurrency(totalEstimatedReward)}</p>
                 </div>
               </div>
           </div>

@@ -818,7 +818,7 @@ export default function CarPage() {
   if (isUserLoading || (isLoading && (!userCars.length || !availableModels.length))) {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#7b2ff7]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#43c9d6]"></div>
       </div>
     );
   }
@@ -830,7 +830,7 @@ export default function CarPage() {
         <p className="text-red-500">{userError || error}</p>
         <button
           onClick={() => window.location.reload()} // Sayfayı yenilemeyi dene
-          className="mt-3 bg-[#7b2ff7] text-white px-4 py-2 rounded-lg"
+          className="mt-3 bg-[#43c9d6] text-white px-4 py-2 rounded-lg"
         >
           Yeniden Dene
         </button>
@@ -853,16 +853,16 @@ export default function CarPage() {
     <div className="pb-20">
       {/* Sayfa Başlığı */}
       <div className="mobile-app-header relative mb-6">
-        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#7b2ff7] via-[#2f7bf7] to-[#2ff7c1] opacity-80"></div>
-        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">Araç Yönetimi</h1>
+        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#43c9d6] via-[#216b9c] to-[#2ff7c1] opacity-80"></div>
+        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">Araç Yönetimi</h1>
       </div>
       
       <div className="space-y-5">
         {/* Sekme Butonları */}
-        <div className="flex justify-between bg-gradient-to-r from-[#1a1a2e] via-[#16213e] to-[#0f3460] rounded-xl p-1.5 shadow-lg border border-[#2a3855]">
+        <div className="flex justify-between bg-gradient-to-r from-[#101b23] via-[#14242d] to-[#0f3460] rounded-xl p-1.5 shadow-lg border border-[#31505b]">
           {/* Buttons remain the same */}
           <button
-            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'my-cars' ? 'bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#16213e]/80'}`}
+            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'my-cars' ? 'bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#14242d]/80'}`}
             onClick={() => setActiveTab('my-cars')}
           >
             <div className="flex items-center justify-center space-x-2">
@@ -874,7 +874,7 @@ export default function CarPage() {
             </div>
           </button>
           <button
-            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'market' ? 'bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#16213e]/80'}`}
+            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'market' ? 'bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#14242d]/80'}`}
             onClick={() => setActiveTab('market')}
           >
             <div className="flex items-center justify-center space-x-2">
@@ -889,8 +889,8 @@ export default function CarPage() {
         {activeTab === 'my-cars' ? (
           <>
             {/* Kullanıcı Araçları Listesi */}
-            <div className="bg-gradient-to-b from-[#1a1a2e] to-[#16213e] bg-opacity-80 rounded-xl p-5 shadow-lg border border-[#0f3460]">
-              <h3 className="text-lg font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white">Araçlarım ({userCars.length})</h3>
+            <div className="bg-gradient-to-b from-[#101b23] to-[#14242d] bg-opacity-80 rounded-xl p-5 shadow-lg border border-[#0f3460]">
+              <h3 className="text-lg font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white">Araçlarım ({userCars.length})</h3>
               {userCars.length === 0 && !isLoading && (
                   <p className="text-center text-gray-400 py-4">Henüz hiç aracınız yok. Pazar sekmesinden yeni araçlar edinebilirsiniz.</p>
               )}
@@ -924,7 +924,7 @@ export default function CarPage() {
                   return (
                     <div 
                       key={car.id} 
-                      className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-lg overflow-hidden transition-all duration-300 hover:translate-y-[-2px] border border-[#2a3855] hover:border-[#3a497a]"
+                      className="bg-gradient-to-r from-[#0f3460] to-[#101b23] rounded-lg overflow-hidden transition-all duration-300 hover:translate-y-[-2px] border border-[#31505b] hover:border-[#3a497a]"
                     >
                       <div className="flex flex-col">
                         {/* Araç Görseli (Use image_url) */}
@@ -977,7 +977,7 @@ export default function CarPage() {
                                 <span>Yakıt</span>
                                 <span>%{car.fuel}</span>
                               </div>
-                              <div className="w-full bg-[#2a3855] rounded-full h-2 overflow-hidden">
+                              <div className="w-full bg-[#31505b] rounded-full h-2 overflow-hidden">
                                 <div className="bg-gradient-to-r from-[#2ff7c1] via-[#6af7c1] to-[#a5f7c1] h-full rounded-full transition-all duration-500" style={{ width: `${car.fuel}%` }}></div>
                               </div>
                             </div>
@@ -987,8 +987,8 @@ export default function CarPage() {
                                 <span>Durum</span>
                                 <span>%{car.condition}</span>
                               </div>
-                              <div className="w-full bg-[#2a3855] rounded-full h-2 overflow-hidden">
-                                <div className="bg-gradient-to-r from-[#2f7bf7] via-[#4f6cf8] to-[#7b2ff7] h-full rounded-full transition-all duration-500" style={{ width: `${car.condition}%` }}></div>
+                              <div className="w-full bg-[#31505b] rounded-full h-2 overflow-hidden">
+                                <div className="bg-gradient-to-r from-[#216b9c] via-[#4f6cf8] to-[#43c9d6] h-full rounded-full transition-all duration-500" style={{ width: `${car.condition}%` }}></div>
                               </div>
                             </div>
                           </div>
@@ -1003,7 +1003,7 @@ export default function CarPage() {
                               <div className="w-24 overflow-hidden">
                                 <div className="w-full h-1 bg-[#0d1423] rounded-full overflow-hidden mt-1">
                                   <div 
-                                    className="h-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7] transition-all duration-300"
+                                    className="h-full bg-gradient-to-r from-[#216b9c] to-[#43c9d6] transition-all duration-300"
                                     style={{ width: `${progress[miningSession.id] || 0}%` }}
                                   ></div>
                           </div>
@@ -1014,7 +1014,7 @@ export default function CarPage() {
             </div>
             
                       {/* Araç Kontrol Butonları - Her araç için göster */}
-                      <div className="p-3 border-t border-[#2a3855]/30 flex flex-wrap gap-2">
+                      <div className="p-3 border-t border-[#31505b]/30 flex flex-wrap gap-2">
                         {/* Dinamik Mining Butonu */}
                         <div className="flex-1">
                           {(() => {
@@ -1086,8 +1086,8 @@ export default function CarPage() {
         ) : (
           /* Pazar Tabı */
           <div className="space-y-5">
-            <div className="bg-gradient-to-b from-[#1a1a2e] to-[#16213e] rounded-xl p-5 shadow-lg border border-[#0f3460]">
-              <h3 className="text-lg font-semibold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white">Araç Modelleri</h3>
+            <div className="bg-gradient-to-b from-[#101b23] to-[#14242d] rounded-xl p-5 shadow-lg border border-[#0f3460]">
+              <h3 className="text-lg font-semibold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white">Araç Modelleri</h3>
               <p className="text-gray-400 text-sm mb-4">
                  Farklı nadirliklerdeki araçları NMFP puanları veya Telegram Stars ile satın alabilirsiniz.
               </p>
@@ -1096,7 +1096,7 @@ export default function CarPage() {
               <div className="flex overflow-x-auto pb-2 mb-4 space-x-2 scrollbar-hide">
                  {/* Filter buttons ... (Logic might need change based on how series is handled) */}
                 <button
-                  className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${ activeSeriesFilter === null ? 'bg-gradient-to-r from-[#7b2ff7] to-[#2f7bf7] text-white' : 'bg-[#16213e] text-gray-300 hover:bg-[#1a253a]' }`}
+                  className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${ activeSeriesFilter === null ? 'bg-gradient-to-r from-[#43c9d6] to-[#216b9c] text-white' : 'bg-[#14242d] text-gray-300 hover:bg-[#1a253a]' }`}
                   onClick={() => setActiveSeriesFilter(null)}
                 >
                   Tüm Modeller
@@ -1105,7 +1105,7 @@ export default function CarPage() {
                  {['911', 'Taycan', 'Cayenne', 'Panamera', 'Macan', '718'].map(series => (
                   <button
                     key={series}
-                    className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${ activeSeriesFilter === series ? 'bg-gradient-to-r from-[#7b2ff7] to-[#2f7bf7] text-white' : 'bg-[#16213e] text-gray-300 hover:bg-[#1a253a]' }`}
+                    className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${ activeSeriesFilter === series ? 'bg-gradient-to-r from-[#43c9d6] to-[#216b9c] text-white' : 'bg-[#14242d] text-gray-300 hover:bg-[#1a253a]' }`}
                     onClick={() => setActiveSeriesFilter(series)}
                   >
                     {series}
@@ -1121,10 +1121,10 @@ export default function CarPage() {
                   return (
                     <div 
                       key={model.id} // Use model.id (UUID)
-                      className="bg-gradient-to-r from-[#0f3460]/90 to-[#0a1936]/90 rounded-xl overflow-hidden border border-[#2a3855] transition-all duration-300 hover:border-[#4a5886] shadow-lg flex flex-col"
+                      className="bg-gradient-to-r from-[#0f3460]/90 to-[#0a1936]/90 rounded-xl overflow-hidden border border-[#31505b] transition-all duration-300 hover:border-[#4a5886] shadow-lg flex flex-col"
                     >
                       {/* Araç Görseli */}
-                      <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#16213e] to-[#0f3460]">
+                      <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#14242d] to-[#0f3460]">
                          {/* ... gradient overlay ... */}
                         <Image
                           src={model.image_url || '/placeholder-car.png'} // Use image_url
@@ -1137,7 +1137,7 @@ export default function CarPage() {
                       </div>
                       
                       {/* Araç Bilgileri */}
-                      <div className="p-5 border-t border-b border-[#2a3855] bg-gradient-to-r from-[#0f3460]/50 to-[#1a1a2e]/50">
+                      <div className="p-5 border-t border-b border-[#31505b] bg-gradient-to-r from-[#0f3460]/50 to-[#101b23]/50">
                          {/* ... Model name, mining power, rarity display (using model.mining_power, model.rarity) ... */}
                         <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                           <div>
@@ -1147,7 +1147,7 @@ export default function CarPage() {
                                 <p className="text-gray-400 text-xs mb-1">Madencilik Gücü</p>
                                 <p className="font-medium text-white flex items-center">
                                   {/* ... icon ... */}
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-[#7b2ff7]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-[#43c9d6]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                   </svg>
                                   {formatCurrency(model.mining_power)} NMFP/saat
@@ -1168,7 +1168,7 @@ export default function CarPage() {
                       <div className="p-5 flex flex-col gap-3">
                         {/* Buy with NMFP Button */}
                         <button 
-                          className={`bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30 flex items-center justify-between ${purchaseLoading === `NMFP-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
+                          className={`bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#43c9d6]/30 flex items-center justify-between ${purchaseLoading === `NMFP-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
                           onClick={() => handlePurchase(model, 'NMFP')}
                           disabled={purchaseLoading === `NMFP-${model.id}`}
                         >
