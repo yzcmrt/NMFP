@@ -1,4 +1,5 @@
 'use client';
+import { starsCheckout } from '@/lib/starsCheckout';
 
 import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
@@ -114,186 +115,18 @@ export default function GaragePage() {
   }, []);
 
   // Combined purchase handler
-  const handlePurchaseGarage = async (template: GarageTemplate, purchaseType: 'nmfp' | 'ton' | string) => {
-    if (!user || !user.id) {
-      toast.error('Satın alma işlemi için kullanıcı bilgisi gerekli.');
-        return;
-      }
-     if (!template || !template.id) {
-        toast.error('Geçersiz garaj şablonu bilgisi.');
-        return;
-      }
-
-    const loadingKey = `${purchaseType}-${template.id}`;
-    setPurchaseLoading(loadingKey);
-    
-    // Transaction ID'si oluştur
-    const transactionId = `garage_purchase_${template.id}_${Date.now()}`;
-    
-    const toastId = toast.loading(`${template.name} satın alınıyor...`, {
-      style: {
-        background: 'rgba(26, 26, 46, 0.95)',
-        color: '#fff',
-        border: '1px solid rgba(42, 56, 85, 0.5)'
-      }
-    });
-
+  const handlePurchase = async (template: GarageTemplate) => {
+    if(!user?.id || purchaseLoading)return;
+    setPurchaseLoading(template.id);
+    const toastId=toast.loading('Garaj satın alınıyor…');
     try {
-        let purchasePrice: number;
-        let currency: string;
-
-        // Check purchase type based on the template's property
-        if (template.purchase_type === 'nmfp') {
-            purchasePrice = template.price; // Use template.price
-            currency = 'NMFP';
-            
-            // NMFP ile garaj satın alma için optimistic update
-            addOptimisticTransaction({
-              id: transactionId,
-              amount: -purchasePrice,
-              type: 'garage_purchase',
-              description: `${template.name} garaj satın alındı`
-            });
-            
-            // Balance validation (CRITICAL SAFETY)
-            if (!validateBalance(realtimeBalance, purchasePrice, `NMFP Garage Purchase: ${template.name}`)) {
-                throw new Error(`Yetersiz ${currency}. Gerekli: ${formatCurrency(purchasePrice)}`);
-            }
-        } else if (template.purchase_type === 'ton') {
-            purchasePrice = template.price; // Use template.price
-            currency = 'TON';
-            
-            // TON cüzdanı bağlı değilse kullanıcıya toast mesajı gösterip, cüzdan bağlama işlemini başlat
-            if (!tonConnectUI.connected) {
-                toast.dismiss(toastId);
-                toast.error('TON ile satın almak için cüzdanınızı bağlayın.');
-                tonConnectUI.openModal(); // TON cüzdan bağlama modalını aç
-                setPurchaseLoading(null);
-                return;
-            }
-             
-            // Cüzdan adresini kontrol et
-            if (!tonConnectUI.account?.address) {
-                throw new Error('TON cüzdan adresi alınamadı. Lütfen bağlantıyı kontrol edip tekrar deneyin.');
-            }
-            
-            // TON transaction logic
-            const nanoTonAmount = toNano(purchasePrice.toString()).toString();
-            const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY';
-            
-            // İşlem geçerlilik süresi (20 dakika)
-            const validUntil = Math.floor(Date.now() / 1000) + 60 * 20;
-            
-            // Basitleştirilmiş işlem yapısı - payload'sız sürüm
-            const transaction = {
-                validUntil: validUntil,
-                messages: [
-                    {
-                        address: gameWalletAddress,
-                        amount: nanoTonAmount
-                        // payload alanı kaldırıldı - BOC oluşturma hatasını önlemek için
-                    }
-                ]
-            };
-            
-            toast.loading('TON işlemi onaylanıyor...', { id: toastId });
-            
-            try {
-                // İşlemi gönder ve sonucu bekle
-                const result = await tonConnectUI.sendTransaction(transaction);
-                
-                if (result && result.boc) {
-                    console.log('TON garaj satın alma işlem sonucu başarılı:', { 
-                        bocLength: result.boc.length,
-                        hasValidBoc: true
-                    });
-                    
-                    toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
-                    
-                    // 5 saniyelik bekleme süresi ekleyin - işlemin yayılması için
-                    await new Promise(resolve => setTimeout(resolve, 5000));
-                } else {
-                    console.error('TON işlemi başarısız - geçersiz boc:', result);
-                    toast.error("İşlem başarısız oldu! Geçersiz işlem sonucu.", { id: toastId });
-                    throw new Error("Geçersiz işlem sonucu");
-                }
-            } catch (txError) {
-                console.error('TON işlem gönderme hatası:', txError);
-                
-                let txErrorMessage = "İşlem gönderilemedi";
-                if (txError instanceof Error) {
-                    if (txError.message?.includes("magic")) {
-                        txErrorMessage = "İşlem oluşturulurken hata oluştu. Lütfen TON cüzdanınızı kontrol edip tekrar deneyin.";
-                    } else if (txError.message?.includes("reject") || txError.message?.includes("cancel")) {
-                        txErrorMessage = "İşlem kullanıcı tarafından iptal edildi.";
-                    } else if (txError.message?.includes("emulate")) {
-                        txErrorMessage = "İşlem simülasyonu başarısız oldu. Lütfen TON bakiyenizi kontrol edin.";
-                    }
-                }
-                
-                toast.error(txErrorMessage, { id: toastId });
-                throw new Error(txErrorMessage);
-            }
-        } else {
-            throw new Error('Bu garaj şablonu satın alınamaz veya geçersiz tip.');
-        }
-
-        toast.loading(`Sunucu ile ${currency} işlemi doğrulanıyor...`, { id: toastId });
-
-        // Call the RPC function AFTER potential TON transaction
-        // Pass template.id (string) and template.purchase_type
-        const newGarageId = await garageService.purchaseGarage(user.id, template.id, template.purchase_type);
-
-        if (newGarageId) {
-            // Transaction başarılı - optimistic update'i commit et
-            commitTransaction(transactionId);
-            
-            toast.success(`${template.name} garaj başarıyla satın alındı!`, { 
-              id: toastId,
-              style: {
-                background: 'rgba(47, 247, 193, 0.1)',
-                color: '#2ff7c1',
-                border: '1px solid rgba(47, 247, 193, 0.3)'
-              }
-            });
-            
-            // Refresh user garages list
-            const updatedGarages = await garageService.getUserGarages(user.id);
-            setUserGarages(updatedGarages);
-            setActiveTab('garages'); // Switch to my garages tab
-
-            // Real-time balance refresh (fallback)
-            await refreshBalance();
-        } else {
-            throw new Error(`Garaj satın alma işlemi başarısız oldu.`);
-        }
-
-    } catch (error: any) {
-      console.error(`${template.purchase_type} ile garaj satın alma hatası:`, error);
-      
-      // Rollback optimistic transaction (NMFP için)
-      if (template.purchase_type === 'nmfp') {
-        rollbackTransaction(transactionId);
-      }
-      
-      let errorMessage = error.message || `Garaj satın alma sırasında hata oluştu.`;
-      
-      // Specific error handling  
-      if (errorMessage.includes('Yetersiz')) {
-        errorMessage = `Yetersiz ${template.purchase_type.toUpperCase()} bakiyesi. Gerekli: ${formatCurrency(template.price)}`;
-      }
-      
-      toast.error(errorMessage, { 
-        id: toastId,
-        style: {
-          background: 'rgba(239, 68, 68, 0.1)',
-          color: '#ef4444',
-          border: '1px solid rgba(239, 68, 68, 0.3)'
-        }
-      });
-      } finally {
-      setPurchaseLoading(null);
-      }
+      if(template.purchase_type==='ton') await starsCheckout('garage',template.id);
+      else { const id=await garageService.purchaseGarage(user.id,template.id,'NMFP'); if(!id)throw new Error('Garaj satın alınamadı.'); }
+      setUserGarages(await garageService.getUserGarages(user.id));
+      await refreshBalance(); setActiveTab('garages');
+      toast.success('Garaj hesabına eklendi.',{id:toastId});
+    }catch(error){toast.error(error instanceof Error?error.message:'Satın alma tamamlanamadı.',{id:toastId});}
+    finally{setPurchaseLoading(null);}
   };
 
   // Helper to filter templates by purchase method
@@ -304,7 +137,7 @@ export default function GaragePage() {
    if (isUserLoading || (isLoading && (!userGarages.length || !availableTemplates.length))) {
      return (
        <div className="flex items-center justify-center min-h-[300px]">
-         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#7b2ff7]"></div>
+         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#43c9d6]"></div>
        </div>
      );
    }
@@ -315,7 +148,7 @@ export default function GaragePage() {
          <p className="text-red-500">{userError || error}</p>
          <button
            onClick={() => window.location.reload()}
-           className="mt-3 bg-[#7b2ff7] text-white px-4 py-2 rounded-lg"
+           className="mt-3 bg-[#43c9d6] text-white px-4 py-2 rounded-lg"
          >
            Yeniden Dene
          </button>
@@ -335,15 +168,15 @@ export default function GaragePage() {
     <div className="pb-12">
       {/* Sayfa Başlığı */}
       <div className="mobile-app-header relative mb-6">
-        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#7b2ff7] via-[#2f7bf7] to-[#2ff7c1] opacity-80"></div>
-        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">Garaj Yönetimi</h1>
+        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#43c9d6] via-[#216b9c] to-[#2ff7c1] opacity-80"></div>
+        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">Garaj Yönetimi</h1>
       </div>
       
       <div className="space-y-5">
         {/* Tabs */}
-        <div className="flex justify-between bg-gradient-to-r from-[#1a1a2e] via-[#16213e] to-[#0f3460] rounded-xl p-1.5 shadow-lg border border-[#2a3855]">
+        <div className="flex justify-between bg-gradient-to-r from-[#101b23] via-[#14242d] to-[#0f3460] rounded-xl p-1.5 shadow-lg border border-[#31505b]">
           <button
-            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'garages' ? 'bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#16213e]/80'}`}
+            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'garages' ? 'bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#14242d]/80'}`}
             onClick={() => setActiveTab('garages')}
           >
             <div className="flex items-center justify-center space-x-2">
@@ -354,7 +187,7 @@ export default function GaragePage() {
             </div>
           </button>
           <button
-            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'store' ? 'bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#16213e]/80'}`}
+            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'store' ? 'bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#14242d]/80'}`}
             onClick={() => setActiveTab('store')}
           >
             <div className="flex items-center justify-center space-x-2">
@@ -373,9 +206,9 @@ export default function GaragePage() {
                  <p className="text-center text-gray-400 py-4">Henüz hiç garajınız yok. Pazar sekmesinden yeni garajlar edinebilirsiniz.</p>
              )}
             {userGarages.map(garage => (
-              <div key={garage.id} className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-xl overflow-hidden border border-[#2a3855] transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/20">
+              <div key={garage.id} className="bg-gradient-to-r from-[#0f3460] to-[#101b23] rounded-xl overflow-hidden border border-[#31505b] transition-all duration-300 hover:shadow-lg hover:shadow-[#43c9d6]/20">
                 {/* Garage Image */}
-                <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#16213e] to-[#0f3460]">
+                <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#14242d] to-[#0f3460]">
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0f3460] to-transparent opacity-30 z-10"></div>
                   {garage.image_url && (
                     <Image
@@ -404,13 +237,13 @@ export default function GaragePage() {
                   
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     {/* Capacity */}
-                    <div className="bg-[#1a1a2e] p-3 rounded-lg border border-[#2a3855]/50">
+                    <div className="bg-[#101b23] p-3 rounded-lg border border-[#31505b]/50">
                       <p className="text-xs text-gray-400">Kapasite</p>
                        {/* occupied needs to be calculated/fetched if needed */}
                       <p className="font-medium text-white">?/{garage.capacity}</p>
                     </div>
                     {/* Daily Bonus */}
-                    <div className="bg-[#1a1a2e] p-3 rounded-lg border border-[#2a3855]/50">
+                    <div className="bg-[#101b23] p-3 rounded-lg border border-[#31505b]/50">
                       <p className="text-xs text-gray-400">Günlük Bonus</p>
                       <p className="font-medium text-[#2ff7c1]">+{formatCurrency(garage.daily_bonus ?? 0)}</p>
                     </div>
@@ -423,7 +256,7 @@ export default function GaragePage() {
                        <div className="w-3 h-3 rounded-full bg-yellow-500 animate-pulse mr-2"></div>
                        <span className="text-sm text-yellow-500">Bonus Bekleniyor</span>
                     </div>
-                    <button className="bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30">
+                    <button className="bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white px-6 py-2 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#43c9d6]/30">
                       Bonusu Topla
                     </button>
                   </div>
@@ -436,16 +269,16 @@ export default function GaragePage() {
           <div className="space-y-6">
             {/* Store Header */}
             <div className="text-center mt-4 mb-6">
-              <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white">Garaj Pazarı</h2>
+              <h2 className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white">Garaj Pazarı</h2>
               <p className="text-gray-400 mt-2">Yeni garajlar satın alarak araç koleksiyonunuzu genişletin!</p>
             </div>
             
             {/* Store Sub-Tabs (NMFP/TON) */}
             <div className="flex justify-center mb-6">
-              <div className="inline-flex rounded-md shadow-sm p-1 bg-[#1a1a2e] border border-[#2a3855]">
+              <div className="inline-flex rounded-md shadow-sm p-1 bg-[#101b23] border border-[#31505b]">
                 <button
                   onClick={() => setStoreTab('nmfp')}
-                  className={`px-4 py-2 text-sm rounded-md ${storeTab === 'nmfp' ? 'bg-gradient-to-r from-[#7b2ff7] to-[#5f40f8] text-white' : 'text-gray-400 hover:text-white'}`}
+                  className={`px-4 py-2 text-sm rounded-md ${storeTab === 'nmfp' ? 'bg-gradient-to-r from-[#43c9d6] to-[#176e91] text-white' : 'text-gray-400 hover:text-white'}`}
                 >
                   NMFP Garajları ({getNMFPGarages().length})
                 </button>
@@ -453,7 +286,7 @@ export default function GaragePage() {
                   onClick={() => setStoreTab('ton')}
                   className={`px-4 py-2 text-sm rounded-md ${storeTab === 'ton' ? 'bg-gradient-to-r from-[#0088cc] to-[#00a2e0] text-white' : 'text-gray-400 hover:text-white'}`}
                 >
-                  TON Garajları ({getTONGarages().length})
+                  Stars Garajları ({getTONGarages().length})
                 </button>
               </div>
             </div>
@@ -461,7 +294,7 @@ export default function GaragePage() {
             {/* NMFP Templates */} 
             {storeTab === 'nmfp' && (
               <div className="space-y-6">
-                <div className="p-4 bg-[#1a1a2e]/50 rounded-lg border border-[#2a3855] mb-4">
+                <div className="p-4 bg-[#101b23]/50 rounded-lg border border-[#31505b] mb-4">
                   <div className="flex items-center gap-2 text-sm text-[#2ff7c1]">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
@@ -471,9 +304,9 @@ export default function GaragePage() {
                 </div>
                 
                 {getNMFPGarages().map((template: GarageTemplate) => (
-                  <div key={template.id} className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-xl overflow-hidden border border-[#2a3855] transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/20">
+                  <div key={template.id} className="bg-gradient-to-r from-[#0f3460] to-[#101b23] rounded-xl overflow-hidden border border-[#31505b] transition-all duration-300 hover:shadow-lg hover:shadow-[#43c9d6]/20">
                     {/* Template Image */}
-                    <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#16213e] to-[#0f3460]">
+                    <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#14242d] to-[#0f3460]">
                       <div className="absolute inset-0 bg-gradient-to-t from-[#0f3460]/60 to-transparent opacity-30 z-10"></div>
                       <Image
                         src={template.image || '/placeholder-garage.png'}
@@ -488,7 +321,7 @@ export default function GaragePage() {
                     <div className="p-4">
                       <div className="flex justify-between items-center mb-3">
                         <h3 className="text-lg font-semibold text-white">{template.name}</h3>
-                        <span className="font-bold text-[#7b2ff7]">{formatCurrency(template.price)} NMFP</span>
+                        <span className="font-bold text-[#43c9d6]">{formatCurrency(template.price)} NMFP</span>
                       </div>
                       
                       <p className="text-sm text-gray-400 mb-3">{template.description || 'Açıklama bulunmuyor.'}</p>
@@ -504,9 +337,9 @@ export default function GaragePage() {
                       
                       {/* Purchase Button */}
                       <button 
-                        onClick={() => handlePurchaseGarage(template, 'nmfp')}
+                        onClick={() => handlePurchase(template)}
                         disabled={purchaseLoading === `nmfp-${template.id}` || (user?.balance ?? 0) < template.price}
-                        className="w-full mt-3 bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
+                        className="w-full mt-3 bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#43c9d6]/30 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none"
                       >
                          {purchaseLoading === `nmfp-${template.id}` ? "İşlem yapılıyor..." : "NMFP ile Satın Al"}
                       </button>
@@ -527,7 +360,7 @@ export default function GaragePage() {
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                       <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                     </svg>
-                     <p>TON ile satın alabileceğiniz özel garajlar</p>
+                     <p>Stars ile satın alabileceğiniz özel garajlar</p>
                   </div>
                 </div>
                 
@@ -549,7 +382,7 @@ export default function GaragePage() {
                       <div className="p-4">
                         <div className="flex justify-between items-center mb-3">
                         <h3 className="text-lg font-semibold text-white">{template.name}</h3>
-                        <span className="font-bold text-[#0088cc]">{formatCurrency(template.price)} TON</span>
+                        <span className="font-bold text-[#0088cc]">{template.stars_price} Stars</span>
                         </div>
                         
                       <p className="text-sm text-gray-400 mb-3">{template.description || 'Açıklama bulunmuyor.'}</p>
@@ -565,17 +398,17 @@ export default function GaragePage() {
                         
                        {/* Purchase Button */}
                         <button 
-                         onClick={() => handlePurchaseGarage(template, 'ton')}
+                         onClick={() => handlePurchase(template)}
                          disabled={purchaseLoading === `ton-${template.id}`}
                           className="w-full mt-3 bg-gradient-to-r from-[#0088cc] to-[#00a2e0] text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#0088cc]/30 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                         {purchaseLoading === `ton-${template.id}` ? "İşleniyor..." : (tonConnectUI.connected ? "TON ile Satın Al" : "Cüzdan Bağla")}
+                         {purchaseLoading === `ton-${template.id}` ? "İşleniyor..." : (tonConnectUI.connected ? "Stars ile Satın Al" : "Cüzdan Bağla")}
                         </button>
                       </div>
                     </div>
                   ))}
                  {getTONGarages().length === 0 && !isLoading && (
-                     <p className="text-center text-gray-400 py-4">Şu anda TON ile satın alınabilecek garaj yok.</p>
+                     <p className="text-center text-gray-400 py-4">Şu anda Stars ile satın alınabilecek garaj yok.</p>
                  )}
               </div>
             )}

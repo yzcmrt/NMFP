@@ -283,7 +283,7 @@ export default function StatsPage() {
   if (providerLoading || dataLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-screen">
-        <div className="w-12 h-12 border-4 border-t-4 border-gray-200 rounded-full animate-spin mb-4 border-t-[#7b2ff7]"></div>
+        <div className="w-12 h-12 border-4 border-t-4 border-gray-200 rounded-full animate-spin mb-4 border-t-[#43c9d6]"></div>
         <p className="text-white">İstatistikler yükleniyor...</p>
       </div>
     );
@@ -303,11 +303,11 @@ export default function StatsPage() {
     return (
       <div className="pb-12">
         <div className="mobile-app-header relative mb-6">
-          <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#7b2ff7] via-[#2f7bf7] to-[#2ff7c1] opacity-80"></div>
-          <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">İstatistikler</h1>
+          <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#43c9d6] via-[#216b9c] to-[#2ff7c1] opacity-80"></div>
+          <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">İstatistikler</h1>
         </div>
         
-        <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-6 rounded-xl border border-[#2a3855] shadow-md text-center">
+        <div className="bg-gradient-to-r from-[#0f3460] to-[#101b23] p-6 rounded-xl border border-[#31505b] shadow-md text-center">
           <p className="text-white mb-4">Henüz yeterli istatistik verisi bulunmuyor.</p>
           <p className="text-gray-400">Mining yaparak ve diğer aktiviteleri tamamlayarak istatistiklerinizin oluşmasını sağlayabilirsiniz.</p>
         </div>
@@ -319,27 +319,27 @@ export default function StatsPage() {
     <div className="pb-12">
       {/* Sayfa Başlığı */}
       <div className="mobile-app-header relative mb-6">
-        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#7b2ff7] via-[#2f7bf7] to-[#2ff7c1] opacity-80"></div>
-        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">İstatistikler</h1>
+        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#43c9d6] via-[#216b9c] to-[#2ff7c1] opacity-80"></div>
+        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">İstatistikler</h1>
       </div>
       
       <div className="space-y-5">
         {/* Time range selector */}
-        <div className="flex justify-between bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-lg p-1">
+        <div className="flex justify-between bg-gradient-to-r from-[#0f3460] to-[#101b23] rounded-lg p-1">
           <button
-            className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all duration-300 ${timeRange === 'daily' ? 'bg-gradient-to-r from-[#7b2ff7]/80 via-[#5f40f8]/80 to-[#2f7bf7]/80 text-white' : 'text-gray-400 hover:text-white hover:bg-[#2a3855]/50'}`}
+            className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all duration-300 ${timeRange === 'daily' ? 'bg-gradient-to-r from-[#43c9d6]/80 via-[#176e91]/80 to-[#216b9c]/80 text-white' : 'text-gray-400 hover:text-white hover:bg-[#31505b]/50'}`}
             onClick={() => setTimeRange('daily')}
           >
             Günlük
           </button>
           <button
-            className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all duration-300 ${timeRange === 'weekly' ? 'bg-gradient-to-r from-[#7b2ff7]/80 via-[#5f40f8]/80 to-[#2f7bf7]/80 text-white' : 'text-gray-400 hover:text-white hover:bg-[#2a3855]/50'}`}
+            className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all duration-300 ${timeRange === 'weekly' ? 'bg-gradient-to-r from-[#43c9d6]/80 via-[#176e91]/80 to-[#216b9c]/80 text-white' : 'text-gray-400 hover:text-white hover:bg-[#31505b]/50'}`}
             onClick={() => setTimeRange('weekly')}
           >
             Haftalık
           </button>
           <button
-            className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all duration-300 ${timeRange === 'monthly' ? 'bg-gradient-to-r from-[#7b2ff7]/80 via-[#5f40f8]/80 to-[#2f7bf7]/80 text-white' : 'text-gray-400 hover:text-white hover:bg-[#2a3855]/50'}`}
+            className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all duration-300 ${timeRange === 'monthly' ? 'bg-gradient-to-r from-[#43c9d6]/80 via-[#176e91]/80 to-[#216b9c]/80 text-white' : 'text-gray-400 hover:text-white hover:bg-[#31505b]/50'}`}
             onClick={() => setTimeRange('monthly')}
           >
             Aylık
@@ -350,18 +350,18 @@ export default function StatsPage() {
         <div className="space-y-4">
           {/* Summary Cards */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
+            <div className="bg-gradient-to-r from-[#0f3460] to-[#101b23] p-4 rounded-xl border border-[#31505b] shadow-md">
               <div className="text-xs text-gray-400 mb-1">Toplam Kazanç</div>
               <div className="text-xl font-bold text-[#2ff7c1]">{formatCurrency(totalEarnings)} NMFP</div>
             </div>
-            <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
+            <div className="bg-gradient-to-r from-[#0f3460] to-[#101b23] p-4 rounded-xl border border-[#31505b] shadow-md">
               <div className="text-xs text-gray-400 mb-1">Günlük Ortalama</div>
               <div className="text-xl font-bold text-[#2ff7c1]">{formatCurrency(averageEarning)} NMFP</div>
             </div>
           </div>
           
           {/* Kazanç Grafiği */}
-          <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
+          <div className="bg-gradient-to-r from-[#0f3460] to-[#101b23] p-4 rounded-xl border border-[#31505b] shadow-md">
             <h3 className="text-sm font-medium mb-4 text-white">
               {timeRange === 'daily' ? 'Günlük' : timeRange === 'weekly' ? 'Haftalık' : 'Aylık'} Kazanç Grafiği
             </h3>
@@ -373,14 +373,14 @@ export default function StatsPage() {
                 >
                   <defs>
                     <linearGradient id="colorEarning" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#7b2ff7" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#7b2ff7" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#43c9d6" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#43c9d6" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <XAxis 
                     dataKey="day" 
                     tick={{ fontSize: 10, fill: '#9ca3af' }} 
-                    axisLine={{ stroke: '#2a3855' }}
+                    axisLine={{ stroke: '#31505b' }}
                     tickLine={false}
                   />
                   <YAxis 
@@ -389,13 +389,13 @@ export default function StatsPage() {
                   <CartesianGrid 
                     strokeDasharray="3 3" 
                     vertical={false} 
-                    stroke="#2a3855"
+                    stroke="#31505b"
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Area 
                     type="monotone" 
                     dataKey="value" 
-                    stroke="#7b2ff7" 
+                    stroke="#43c9d6" 
                     fillOpacity={1} 
                     fill="url(#colorEarning)" 
                   />
@@ -405,13 +405,13 @@ export default function StatsPage() {
           </div>
           
           {/* Son Kazançlar */}
-          <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
+          <div className="bg-gradient-to-r from-[#0f3460] to-[#101b23] p-4 rounded-xl border border-[#31505b] shadow-md">
             <h3 className="text-sm font-medium mb-3 text-white">Son Kazançlar</h3>
             <div className="space-y-3">
               {earningData.slice(0, 5).map((item, index) => (
-                <div key={index} className="flex justify-between items-center py-2 border-b border-[#2a3855]">
+                <div key={index} className="flex justify-between items-center py-2 border-b border-[#31505b]">
                   <div className="flex items-center">
-                    <div className="w-10 h-10 bg-gradient-to-r from-[#2f7bf7]/30 to-[#7b2ff7]/30 rounded-full flex items-center justify-center mr-3 shadow-md">
+                    <div className="w-10 h-10 bg-gradient-to-r from-[#216b9c]/30 to-[#43c9d6]/30 rounded-full flex items-center justify-center mr-3 shadow-md">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-[#2ff7c1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
@@ -431,7 +431,7 @@ export default function StatsPage() {
           
           {/* Araç Performansı */}
           {carPerformanceData.length > 0 && (
-            <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
+            <div className="bg-gradient-to-r from-[#0f3460] to-[#101b23] p-4 rounded-xl border border-[#31505b] shadow-md">
               <h3 className="text-sm font-medium mb-4 text-white">Araç Performansı</h3>
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
@@ -439,19 +439,19 @@ export default function StatsPage() {
                     data={carPerformanceData}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2a3855" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#31505b" />
                     <XAxis 
                       dataKey="name" 
                       tick={{ fontSize: 10, fill: '#9ca3af' }} 
-                      axisLine={{ stroke: '#2a3855' }}
+                      axisLine={{ stroke: '#31505b' }}
                       tickLine={false}
                     />
                     <YAxis 
                       hide={true}
                     />
                     <Tooltip content={<CarPerformanceTooltip />} />
-                    <Bar dataKey="earning" fill="#7b2ff7" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="efficiency" fill="#2f7bf7" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="earning" fill="#43c9d6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="efficiency" fill="#216b9c" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -460,7 +460,7 @@ export default function StatsPage() {
           
           {/* Aktivite Dağılımı */}
           {activityData.length > 0 && (
-            <div className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] p-4 rounded-xl border border-[#2a3855] shadow-md">
+            <div className="bg-gradient-to-r from-[#0f3460] to-[#101b23] p-4 rounded-xl border border-[#31505b] shadow-md">
               <h3 className="text-sm font-medium mb-4 text-white">Aktivite Dağılımı</h3>
               <div className="h-64 flex items-center justify-center">
                 <ResponsiveContainer width="100%" height="100%">
@@ -481,7 +481,7 @@ export default function StatsPage() {
                     <Tooltip 
                       formatter={(value) => [`${value}%`, 'Aktivite']}
                       itemStyle={{ color: '#fff' }}
-                      contentStyle={{ backgroundColor: '#1a1a2e', borderColor: '#2a3855' }}
+                      contentStyle={{ backgroundColor: '#101b23', borderColor: '#31505b' }}
                     />
                   </PieChart>
                 </ResponsiveContainer>

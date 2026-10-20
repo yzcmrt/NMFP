@@ -1,0 +1,20 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createHmac} from 'node:crypto';
+import {validateTelegramData,signSession,readSession,checkOrigin,sessionCookie} from '../src/server/auth';
+const token='12345:test-only-token',now=1800000000;
+function signed(fields:Record<string,string>) {const p=new URLSearchParams(fields);const key=createHmac('sha256','WebAppData').update(token).digest();p.set('hash',createHmac('sha256',key).update([...p].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${k}=${v}`).join('\n')).digest('hex'));return p.toString();}
+const fields={auth_date:String(now),query_id:'fixture',user:JSON.stringify({id:12345,first_name:'Test'})};
+test('valid Telegram HMAC accepts identity',()=>assert.equal(validateTelegramData(signed(fields),token,now).id,12345));
+test('altered user is rejected',()=>assert.throws(()=>validateTelegramData(signed(fields).replace('12345','54321'),token,now)));
+test('wrong bot token is rejected',()=>assert.throws(()=>validateTelegramData(signed(fields),'other',now)));
+test('expired and future Telegram data rejected',()=>{for(const auth_date of [now-3601,now+31])assert.throws(()=>validateTelegramData(signed({...fields,auth_date:String(auth_date)}),token,now));});
+test('duplicate auth fields rejected',()=>assert.throws(()=>validateTelegramData(signed(fields)+'&auth_date='+now,token,now)));
+test('malformed user and hash rejected',()=>{assert.throws(()=>validateTelegramData(signed({...fields,user:'null'}),token,now));assert.throws(()=>validateTelegramData('hash=nope',token,now));});
+process.env.SESSION_SECRET='test-only-session-secret-longer-than-32-characters';
+const session={userId:'00000000-0000-4000-8000-000000000001',telegramId:'12345',exp:Math.floor(Date.now()/1000)+60};
+const req=(cookie:string)=>new Request('https://nmfp.vercel.app/api/data/users',{headers:{cookie:'nmfp_session='+cookie}});
+test('session round-trip and HttpOnly cookie',()=>{assert.deepEqual(readSession(req(signSession(session))),session);assert.match(sessionCookie(session),/HttpOnly/);});
+test('modified, expired and absent session rejected',()=>{assert.throws(()=>readSession(req(signSession(session)+'x')));assert.throws(()=>readSession(req(signSession({...session,exp:1}))));assert.throws(()=>readSession(req('')));});
+test('cross-origin writes and absent origin rejected',()=>{for(const origin of ['https://evil.example','null',''])assert.throws(()=>checkOrigin(new Request('https://nmfp.vercel.app/api/stars/invoice',{headers:{origin}})));checkOrigin(new Request('https://nmfp.vercel.app/api/stars/invoice',{headers:{origin:'https://nmfp.vercel.app'}}));});
+test('production session supports embedded Telegram webviews with secure partitioned cookie',()=>{const before=process.env.NODE_ENV;Object.assign(process.env,{NODE_ENV:'production'});try{assert.match(sessionCookie(session),/SameSite=None; Secure; Partitioned/);}finally{if(before===undefined)Reflect.deleteProperty(process.env,'NODE_ENV');else Object.assign(process.env,{NODE_ENV:before});}});

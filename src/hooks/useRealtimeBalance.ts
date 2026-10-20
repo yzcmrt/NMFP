@@ -113,7 +113,7 @@ export function useRealtimeBalance({
       if (eventUserId === userId) {
         // Transaction confirmation
         const transactionId = `server_${transaction.id}`;
-        commitTransaction(transactionId);
+        commitTransaction(userId, transactionId);
         
         console.log(`[useRealtimeBalance] Transaction confirmed: ${transaction.type} - ${transaction.amount}`);
       }

@@ -1,130 +1,27 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# NMFP — Telegram garage game
 
-## Getting Started
+A Next.js Telegram Mini App for collecting virtual cars, managing garages and earning in-game NMFP points. Purchases use Telegram Stars. NMFP points and game items have no cash value; this release does not mint NFTs or accept TON deposits.
 
-First, run the development server:
+## Development
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+Use Node.js 22 or 24. Install with `npm ci`, configure `.env.local`, then run `npm run dev`.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Required server variables: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `SESSION_SECRET` (at least 32 random characters), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Public variables: `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_WEBAPP_URL`, `NEXT_PUBLIC_TON_MANIFEST_URL`, `NEXT_PUBLIC_WEB3FORMS_KEY`. Never prefix server credentials with `NEXT_PUBLIC_`. The historical bot/Pinata credentials must be rotated because the previous app exposed them to browsers.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run `npm test`, `npm run typecheck`, `npm run lint`, and `npm run build`. `tests/database-rollback.sql` exercises signup, starter assets, mining and Stars fulfillment in a transaction that must be rolled back. Use it against a staging database or append it to the recovery migrations inside BEGIN / ROLLBACK; never run its fixture as a committed production transaction.
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+Telegram initData is checked on the server (HMAC and freshness). An HttpOnly signed session scopes all reads and mutations to its owner. Browsers contain no Supabase credentials. Game mutations lock the account row; mining completion and payment fulfillment are idempotent. Client payment callbacks are not proof of payment.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Stars checkout creates a server-priced invoice. The webhook verifies its secret, currency, amount and owner before fulfillment. A duplicate item purchase is recorded for refund and refunded through Telegram; transient errors return 500 for retry. The Wallet view shows server-confirmed order history. `/terms`, `/support`, `/paysupport` cover purchase information and support. The 199-Star auto-mining plan lasts 365 days, does not renew automatically, and spends only in-game NMFP on maintenance.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment
 
-## Deploy on Vercel
+Deploy this repository as a Next.js project on Vercel. Set the required environment variables for the intended environment. Apply the recovery migrations dated 20261019 and 20261020 to the existing NMFP schema in order, after a backup. They preserve accounts and inventory, restrict anonymous database access, replace conflicting mining triggers and consolidate mining processing under the `nmfp-mining-v2` cron job.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Configure the bot webhook to `<SITE_URL>/api/telegram/webhook` with `secret_token=TELEGRAM_WEBHOOK_SECRET` and allowed updates `message,pre_checkout_query`. Set the bot menu button to `<SITE_URL>/gamefi`. The Main Mini App URL, if configured in BotFather, must use the same URL. Check `getWebhookInfo` after publishing. A standalone polling bot is no longer needed.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-# NMFP (Need Money For Porsche) Projesi
-
-## NFT Mintleme ve TON İle Alışveriş Özellikleri (Güncellendi)
-
-### NFT Mintleme Özelliği
-
-NMFP projesi, Porsche araç modellerinin NFT'lerini mint etme özelliği sunmaktadır. Bu özellik, TON blockchain ağını kullanarak gerçekleştirilir.
-
-#### NFT Mintleme Maliyetleri
-
-NFT mintleme maliyetleri, araçların nadirlik seviyelerine göre değişiklik gösterir:
-
-- **Common (Yaygın)**: 1 TON
-- **Rare (Nadir)**: 2 TON
-- **Epic (Destansı)**: 3.5 TON
-- **Legendary (Efsanevi)**: 5 TON
-
-#### NFT Metadata Yapısı
-
-Her NFT için Cyberpunk temalı metadata yapısı kullanılır:
-
-- Araç Adı ve Markası
-- Cyberpunk temalı açıklama (her araç için dinamik olarak oluşturulur)
-- Araç Serisi ve Nadir Seviyesi (Attributes olarak)
-- Koleksiyon Bilgisi (NMFP Racing)
-
-### TON ile Araç Satın Alma
-
-Kullanıcılar, araç modelleri için NFT mintlemenin yanı sıra, doğrudan TON token kullanarak da araç satın alabilirler. Maliyet, aracın mining gücü değerinin 0.1 ile çarpılması sonucu hesaplanır.
-
-### Yeni Geliştirmeler ve İyileştirmeler
-
-#### 1. Gerçek Blockchain Entegrasyonu
-- TEP-62 NFT standardına uygun mint işlemi
-- İşlem doğrulama ve durum kontrolü
-- Gas limitleri ve optimizasyonlar
-- İşlem hash'i takibi
-
-#### 2. Güvenli IPFS Entegrasyonu
-- Sunucu tarafı proxy ile güvenli IPFS yükleme
-- Metadata ve görsel yükleme için API endpointleri
-- Metadatalar için Cyberpunk temalı içerik üretimi
-- CORS hatalarını önleyen mimarı yapı
-
-#### 3. Kullanıcı Deneyimi İyileştirmeleri
-- Detaylı ve kullanıcı dostu hata mesajları
-- İşlem durumu bildirimleri
-- Başarılı işlem takibi
-- Yetersiz bakiye kontrolü
-
-### Kurulum ve Geliştirme
-
-#### Gerekli Bağımlılıklar
-```bash
-npm install
-```
-
-#### Ortam Değişkenleri
-.env.example dosyasındaki değişkenleri .env dosyasına kopyalayın ve kendi değerlerinizi girin:
-```bash
-cp .env.example .env
-```
-
-#### Geliştirme Sunucusu
-```bash
-npm run dev
-```
-
-#### Uygulamayı Build Etme
-```bash
-npm run build
-```
-
-### Teknik Notlar
-
-#### IPFS Proxy Kullanımı
-Bu proje, tarayıcı tarafından CORS kısıtlamalarını aşmak için bir Next.js API proxy kullanır:
-- /api/ipfs/upload-image: Görsel dosyaları IPFS'e yükler
-- /api/ipfs/upload-metadata: NFT metadata'sını IPFS'e yükler
-
-#### TON Blockchain Etkileşimi
-- TON Connect UI kütüphanesi ile cüzdan bağlantısı
-- @ton/core ve @ton/crypto kütüphaneleri ile blockchain işlemleri
-- TEP-62 uyumlu payload oluşturma
-- Gerçek transaction doğrulama
-
-#### Gas Optimizasyonu
-NFT mint işlemleri için gas limitleri varsayılan olarak şöyle belirlenir:
-- Mint işlemi: 0.06 TON
-- Transfer işlemi: 0.03 TON
-- Diğer işlemler: 0.02 TON
-
-Bu değerler çalışma ortamınıza göre .env dosyasından ayarlanabilir.
+The former NFT scaffolding, unauthenticated IPFS routes, direct TON purchase grants and debug mining page have been removed. Their history remains in Git. Optional TonConnect only displays a connected address; it does not sign messages or authorize game purchases.

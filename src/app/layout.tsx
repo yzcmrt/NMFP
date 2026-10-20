@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { headers } from "next/headers";
+import SiteFrame from "@/components/SiteFrame";
 import "./globals.css";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import TonConnectProvider from "@/components/TonConnectProvider";
 
 const geistSans = Geist({
@@ -17,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Need Money For Porsche | Telegram Game",
-  description: "Official website for the Need Money For Porsche Telegram game",
+  title: "NMFP | Cyber Garage",
+  description: "A cyberpunk garage and mining simulator in Telegram. Build your collection, maintain your cars and earn in-game points.",
   icons: {
     icon: [
       { url: '/gamefi/favicon/favicon-16x16.png', sizes: '16x16', type: 'image/png' },
@@ -40,63 +38,8 @@ export const metadata: Metadata = {
   }
 };
 
-export default async function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
-  try {
-    // URL yolunu doğrudan header'lardan al - server-side routing için daha güvenilir
-    const headersList = await headers();
-    const pathname = headersList.get("x-pathname") || "";
-    const isGamefiSubdomain = headersList.get("x-is-gamefi-subdomain") === "true";
-    
-    // GameFi içeriği olup olmadığını kontrol et
-    // Not: Artık middleware, subdomain taklidini yönetiyor, burada sadece içerik kontrolü yapıyoruz
-    const isGamefiRoute = pathname?.startsWith('/gamefi') || false;
-    
-    // Ya subdomain'deyiz ya da gamefi içeriği gösteriyoruz
-    const isGamefi = isGamefiSubdomain || isGamefiRoute;
-
-    // Debug bilgileri
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Layout - Pathname:', pathname);
-      console.log('Layout - Is GameFi Subdomain:', isGamefiSubdomain);
-      console.log('Layout - Is GameFi Route:', isGamefiRoute);
-      console.log('Layout - Final Is GameFi:', isGamefi);
-    }
-
-    return (
-      <html lang="en">
-        <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        >
-          <TonConnectProvider>
-            {!isGamefi && <Navbar />}
-            <main className={!isGamefi ? "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" : ""}>
-              {children}
-            </main>
-            {!isGamefi && <Footer />}
-          </TonConnectProvider>
-        </body>
-      </html>
-    );
-  } catch (error) {
-    // Herhangi bir hata durumunda temel HTML yapısını döndür
-    console.error('Layout error:', error);
-    
-    return (
-      <html lang="en">
-        <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-        >
-          <TonConnectProvider>
-            <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-              {children}
-            </main>
-          </TonConnectProvider>
-        </body>
-      </html>
-    );
-  }
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return <html lang="en"><body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+    <TonConnectProvider><SiteFrame>{children}</SiteFrame></TonConnectProvider>
+  </body></html>;
 }

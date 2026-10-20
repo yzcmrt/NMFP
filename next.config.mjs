@@ -1,14 +1,12 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  reactStrictMode: true,
-  images: {
-    domains: ['images.unsplash.com'],
-    unoptimized: true,
-  },
-  eslint: {
-    // ESLint hatalarında derleme işlemini durdurmayalım
-    ignoreDuringBuilds: true,
-  }
+const config = {
+ reactStrictMode: true,
+ poweredByHeader: false,
+ images: { unoptimized: true },
+ compiler: { removeConsole: { exclude: ['error','warn'] } },
+ async headers() { return [{ source: '/:path*', headers: [
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' }
+ ] }]; }
 };
-
-export default nextConfig;
+export default config;

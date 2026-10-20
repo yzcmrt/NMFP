@@ -1,7 +1,7 @@
 {
-  "url": "https://gamefi.needmoneyforporsche.wtf",
-  "name": "NMFP GameFi",
-  "iconUrl": "https://gamefi.needmoneyforporsche.wtf/favicon/android-icon-192x192.png",
-  "termsOfUseUrl": "https://gamefi.needmoneyforporsche.wtf/terms",
-  "privacyPolicyUrl": "https://gamefi.needmoneyforporsche.wtf/privacy"
-} 
+  "url": "https://nmfp.vercel.app",
+  "name": "Need Money For Porsche",
+  "iconUrl": "https://nmfp.vercel.app/gamefi/favicon/android-icon-192x192.png",
+  "termsOfUseUrl": "https://nmfp.vercel.app/terms",
+  "privacyPolicyUrl": "https://nmfp.vercel.app/privacy"
+}

@@ -1,4 +1,5 @@
 'use client';
+import { starsCheckout } from '@/lib/starsCheckout';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
@@ -33,7 +34,6 @@ import { supabase } from '@/lib/supabaseClient';
 // Import realtime balance management
 import { useRealtimeBalance } from '@/hooks/useRealtimeBalance';
 // Import IPFS Service
-import { ipfsService as IPFSService } from '@/services/ipfsService';
 // Import dynamic mining button
 import DynamicMiningButton, { useMiningButtonState } from '@/components/DynamicMiningButton';
 // Import real-time mining progress
@@ -226,7 +226,7 @@ export default function CarPage() {
         // Series is not in DB schema, filtering/sorting might need changes
         // Visual path correction logic might still be needed if DB paths are inconsistent
         const processedModels = models.map(model => {
-          let adjustedModel = { ...model };
+          const adjustedModel = { ...model };
           // Ensure image_url is usable
           if (adjustedModel.image_url && !adjustedModel.image_url.startsWith('/')) {
             adjustedModel.image_url = `/${adjustedModel.image_url}`;
@@ -368,304 +368,21 @@ export default function CarPage() {
   
   // --- Purchase Handlers --- 
 
-  const handlePurchase = async (model: CarModel, purchaseType: 'NMFP' | 'TON' | 'NFT') => {
-    if (!user || !user.id) {
-      toast.error('Satın alma işlemi için kullanıcı bilgisi gerekli.');
-        return;
-      }
-    if (!model || !model.id) {
-        toast.error('Geçersiz model bilgisi.');
-        return;
-      }
-      
-    const loadingKey = `${purchaseType}-${model.id}`;
-    setPurchaseLoading(loadingKey);
-    
-    // Transaction ID'si oluştur
-    const transactionId = `purchase_${model.id}_${Date.now()}`;
-    
-    const toastId = toast.loading(`${model.name} satın alınıyor...`, {
-      style: {
-        background: 'rgba(26, 26, 46, 0.95)',
-        color: '#fff',
-        border: '1px solid rgba(42, 56, 85, 0.5)'
-      }
-    });
-
-    let purchasePrice: number = 0;
-    let currency: string = '';
-
+  const handlePurchase = async (model: CarModel, purchaseType: 'NMFP' | 'STARS') => {
+    if (!user?.id || purchaseLoading) return;
+    setPurchaseLoading(`${purchaseType}-${model.id}`);
+    const toastId=toast.loading('Satın alma hazırlanıyor…');
     try {
-        switch (purchaseType) {
-            case 'NMFP':
-                purchasePrice = model.nmfp_price;
-                currency = 'NMFP';
-                
-                // Balance validation (CRITICAL)
-                if (!validateBalance(realtimeBalance, purchasePrice, `NMFP Car Purchase: ${model.name}`)) {
-                  throw new Error('Yetersiz NMFP bakiyesi!');
-                }
-                
-                // NMFP satın almalar için optimistic update
-                addOptimisticTransaction({
-                  id: transactionId,
-                  amount: -purchasePrice,
-                  type: 'purchase',
-                  description: `${model.name} satın alındı (NMFP)`
-                });
-                break;
-            case 'TON':
-                purchasePrice = model.ton_price;
-                currency = 'TON';
-                
-                // TON transaction logic
-                if (tonConnectUI.connected && tonConnectUI.account?.address) {
-                    // Nano TON formatına dönüştür
-                    const nanoTonAmount = toNano(purchasePrice.toString()).toString();
-                    
-                    // Oyun cüzdan adresi (doğrula)
-                    const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY';
-                    
-                    // İşlem geçerlilik süresi (20 dakika)
-                    const validUntil = Math.floor(Date.now() / 1000) + 60 * 20;
-                    
-                    // Basitleştirilmiş işlem yapısı - minimum işlem yapısı kullanılıyor
-                    const transaction = {
-                        validUntil: validUntil,
-                        messages: [
-                            {
-                                address: gameWalletAddress,
-                                amount: nanoTonAmount
-                                // payload alanı kaldırıldı - BOC oluşturma hatasını önlemek için
-                            }
-                        ]
-                    };
-                    
-                    toast.loading('TON işlemi onaylanıyor...', { id: toastId });
-                    
-                    try {
-                        // İşlemi gönder ve sonucu bekle
-                        const result = await tonConnectUI.sendTransaction(transaction);
-                        
-                        if (result && result.boc) {
-                            console.log('TON işlem sonucu başarılı:', { 
-                                bocLength: result.boc.length,
-                                hasValidBoc: true
-                            });
-                            
-                            // İşlem başarılı, API'ye doğrulama için gönder
-                            toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
-                            
-                            // 5 saniyelik bekleme süresi ekleyin - işlemin yayılması için
-                            await new Promise(resolve => setTimeout(resolve, 5000));
-                        } else {
-                            console.error('TON işlemi başarısız - geçersiz boc:', result);
-                            toast.error("İşlem başarısız oldu! Geçersiz işlem sonucu.", { id: toastId });
-                            throw new Error("Geçersiz işlem sonucu");
-                        }
-                    } catch (txError) {
-                        console.error('TON işlem gönderme hatası:', txError);
-                        
-                        let txErrorMessage = "İşlem gönderilemedi";
-                        if (txError instanceof Error) {
-                            if (txError.message?.includes("magic")) {
-                                txErrorMessage = "İşlem oluşturulurken hata oluştu. Lütfen TON cüzdanınızı kontrol edip tekrar deneyin.";
-                            } else if (txError.message?.includes("reject") || txError.message?.includes("cancel")) {
-                                txErrorMessage = "İşlem kullanıcı tarafından iptal edildi.";
-                            } else if (txError.message?.includes("emulate")) {
-                                txErrorMessage = "İşlem simülasyonu başarısız oldu. Lütfen TON bakiyenizi kontrol edin.";
-                            }
-                        }
-                        
-                        toast.error(txErrorMessage, { id: toastId });
-                        throw new Error(txErrorMessage);
-                    }
-                } else {
-                    throw new Error('TON ile satın almak için cüzdanınızı bağlayın.');
-                }
-                break;
-            case 'NFT':
-                purchasePrice = model.nft_mint_price;
-                currency = 'TON'; // Minting usually costs TON
-                
-                // TON transaction logic for minting (if not handled solely by RPC)
-                if (tonConnectUI.connected && tonConnectUI.account?.address) {
-                    const nanoTonAmount = toNano(purchasePrice.toString()).toString();
-                    const gameWalletAddress = process.env.NEXT_PUBLIC_GAME_WALLET_ADDRESS || 'EQBYLZxVdTZVmdzEHhxjZ7aY7HnXVgQCUmXQ69cmPwFTGHxY'; 
-                    
-                    // İşlem geçerlilik süresi (20 dakika)
-                    const validUntil = Math.floor(Date.now() / 1000) + 60 * 20;
-                    
-                    // NFT minteleme için basit transaction yapısı
-                    const transaction = {
-                        validUntil: validUntil,
-                        messages: [
-                            {
-                                address: gameWalletAddress,
-                                amount: nanoTonAmount
-                                // karmaşık payload yapısından kaçınılıyor
-                            }
-                        ]
-                    };
-                    
-                    toast.loading('NFT Mint işlemi için TON onayı bekleniyor...', { id: toastId });
-                    
-                    try {
-                        // İşlemi gönder ve sonucu bekle
-                        const result = await tonConnectUI.sendTransaction(transaction);
-                        
-                        if (result && result.boc) {
-                            console.log('NFT Mint TON işlem sonucu başarılı:', { 
-                                bocLength: result.boc.length,
-                                hasValidBoc: true
-                            });
-                            
-                            // Modelin adını standartlaştır - timestamp kullanma
-                            const cleanModelName = model.name
-                                .replace(/^(Porsche|NMFP)\s+/g, '') // Ön ekleri kaldır 
-                                .trim()
-                                .replace(/\s+/g, '_')
-                                .toLowerCase();
-                            
-                            // Temiz dosya adıyla görüntü oluştur (timestamp YOK)
-                            const imageFileName = `car_${cleanModelName}.jpg`;
-                            
-                            // Görsel dosyasını NFT için oluştur
-                            if (!model.image_url) {
-                              throw new Error('Model görsel URL\'si bulunamadı');
-                            }
-                            
-                            const imageFile = await fetch(model.image_url)
-                                .then(res => res.blob())
-                                .then(blob => new File([blob], imageFileName, { type: 'image/jpeg' }));
-                            
-                            // IPFS servisini yükleme işleminde standart tanımlayıcı ile kullan
-                            const imageCid = await IPFSService.uploadImage(imageFile, cleanModelName);
-                            
-                            // Metadata oluştur - Standart format kullan
-                            const metadata = {
-                                name: model.name, // Orijinal model adını koru
-                                description: model.description || `${model.name} NFT`,
-                                image: `ipfs://${imageCid}`,
-                                attributes: [
-                                    {
-                                        trait_type: "Rarity",
-                                        value: model.rarity
-                                    },
-                                    {
-                                        trait_type: "Model",
-                                        value: model.name
-                                    },
-                                    {
-                                        trait_type: "Mining Power",
-                                        value: `${model.mining_power} NMFP/h`
-                                    },
-                                    {
-                                        trait_type: "Max Fuel",
-                                        value: model.max_fuel.toString()
-                                    },
-                                    {
-                                        trait_type: "Max Health", 
-                                        value: model.max_health.toString()
-                                    }
-                                ]
-                            };
-                            
-                            // Metadata'yı IPFS'e standart adlandırma ile yükle (timestamp YOK)
-                            const metadataCid = await IPFSService.uploadMetadata(metadata);
-                            
-                            toast.loading('TON işlemi gönderildi, RPC bekleniyor...', { id: toastId });
-                            
-                            // 5 saniyelik bekleme süresi ekleyin - işlemin yayılması için
-                            await new Promise(resolve => setTimeout(resolve, 5000));
-                        } else {
-                            console.error('NFT Mint TON işlemi başarısız - geçersiz boc:', result);
-                            toast.error("İşlem başarısız oldu! Geçersiz işlem sonucu.", { id: toastId });
-                            throw new Error("Geçersiz işlem sonucu");
-                        }
-                    } catch (txError) {
-                        console.error('NFT Mint TON işlem gönderme hatası:', txError);
-                        
-                        let txErrorMessage = "İşlem gönderilemedi";
-                        if (txError instanceof Error) {
-                            if (txError.message?.includes("magic")) {
-                                txErrorMessage = "İşlem oluşturulurken hata oluştu. Lütfen TON cüzdanınızı kontrol edip tekrar deneyin.";
-                            } else if (txError.message?.includes("reject") || txError.message?.includes("cancel")) {
-                                txErrorMessage = "İşlem kullanıcı tarafından iptal edildi.";
-                            } else if (txError.message?.includes("emulate")) {
-                                txErrorMessage = "İşlem simülasyonu başarısız oldu. Lütfen TON bakiyenizi kontrol edin.";
-                            }
-                        }
-                        
-                        toast.error(txErrorMessage, { id: toastId });
-                        throw new Error(txErrorMessage);
-                    }
-                } else {
-                    throw new Error('NFT mintlemek için cüzdanınızı bağlayın.');
-                }
-                break;
-            default:
-                throw new Error('Geçersiz satın alma tipi');
-        }
-
-        toast.loading(`Sunucu ile ${purchaseType} işlemi doğrulanıyor...`, { id: toastId });
-
-        // Call the RPC function AFTER potential TON transaction
-        const newCarId = await userCarService.purchaseCar(user.id, model.id, purchaseType);
-
-        if (newCarId !== null) {
-            // Transaction başarılı - optimistic update'i commit et
-            commitTransaction(transactionId);
-            
-            toast.success(`${model.name} başarıyla satın alındı!`, { 
-              id: toastId,
-              style: {
-                background: 'rgba(47, 247, 193, 0.1)',
-                color: '#2ff7c1',
-                border: '1px solid rgba(47, 247, 193, 0.3)'
-              }
-            });
-
-            // Refresh user cars list
-            const updatedCars = await userCarService.getUserCars(user.id);
-            setUserCars(updatedCars);
-            setActiveTab('my-cars'); // Switch to my cars tab
-
-            // Real-time balance refresh (fallback)
-            await refreshBalance();
-
-        } else {
-            throw new Error(`Araç satın alma işlemi başarısız oldu.`);
-        }
-
-    } catch (error: any) {
-      console.error(`${purchaseType} ile satın alma hatası:`, error);
-      
-      // Rollback optimistic transaction
-      if (purchaseType === 'NMFP') {
-        rollbackTransaction(transactionId);
+      if (purchaseType==='STARS') await starsCheckout('car',model.id);
+      else {
+        const id=await userCarService.purchaseCar(user.id,model.id,'NMFP');
+        if(!id)throw new Error('Araç satın alınamadı.');
       }
-      
-      let errorMessage = error.message || `${purchaseType} ile satın alma sırasında hata oluştu.`;
-      
-      // Specific error handling
-      if (errorMessage.includes('Yetersiz')) {
-        errorMessage = `Yetersiz ${currency} bakiyesi. Gerekli: ${formatCurrency(purchasePrice)}`;
-      } else if (errorMessage.includes('reject') || errorMessage.includes('cancel')) {
-        errorMessage = 'İşlem kullanıcı tarafından iptal edildi.';
-      }
-      
-      toast.error(errorMessage, { 
-        id: toastId,
-        style: {
-          background: 'rgba(239, 68, 68, 0.1)',
-          color: '#ef4444',
-          border: '1px solid rgba(239, 68, 68, 0.3)'
-        }
-      });
-    } finally {
-      setPurchaseLoading(null);
-    }
+      setUserCars(await userCarService.getUserCars(user.id));
+      await refreshBalance(); setActiveTab('my-cars');
+      toast.success(`${model.name} garajına eklendi.`,{id:toastId});
+    }catch(error){toast.error(error instanceof Error?error.message:'Satın alma tamamlanamadı.',{id:toastId});}
+    finally{setPurchaseLoading(null);}
   };
 
   // --- Mining Başlatma Fonksiyonu ---
@@ -1101,7 +818,7 @@ export default function CarPage() {
   if (isUserLoading || (isLoading && (!userCars.length || !availableModels.length))) {
     return (
       <div className="flex items-center justify-center min-h-[300px]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#7b2ff7]"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#43c9d6]"></div>
       </div>
     );
   }
@@ -1113,7 +830,7 @@ export default function CarPage() {
         <p className="text-red-500">{userError || error}</p>
         <button
           onClick={() => window.location.reload()} // Sayfayı yenilemeyi dene
-          className="mt-3 bg-[#7b2ff7] text-white px-4 py-2 rounded-lg"
+          className="mt-3 bg-[#43c9d6] text-white px-4 py-2 rounded-lg"
         >
           Yeniden Dene
         </button>
@@ -1136,16 +853,16 @@ export default function CarPage() {
     <div className="pb-20">
       {/* Sayfa Başlığı */}
       <div className="mobile-app-header relative mb-6">
-        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#7b2ff7] via-[#2f7bf7] to-[#2ff7c1] opacity-80"></div>
-        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">Araç Yönetimi</h1>
+        <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-[#43c9d6] via-[#216b9c] to-[#2ff7c1] opacity-80"></div>
+        <h1 className="page-title w-full text-center text-2xl font-bold py-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white drop-shadow-[0_0_2px_rgba(123,47,247,0.3)]">Araç Yönetimi</h1>
       </div>
       
       <div className="space-y-5">
         {/* Sekme Butonları */}
-        <div className="flex justify-between bg-gradient-to-r from-[#1a1a2e] via-[#16213e] to-[#0f3460] rounded-xl p-1.5 shadow-lg border border-[#2a3855]">
+        <div className="flex justify-between bg-gradient-to-r from-[#101b23] via-[#14242d] to-[#0f3460] rounded-xl p-1.5 shadow-lg border border-[#31505b]">
           {/* Buttons remain the same */}
           <button
-            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'my-cars' ? 'bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#16213e]/80'}`}
+            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'my-cars' ? 'bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#14242d]/80'}`}
             onClick={() => setActiveTab('my-cars')}
           >
             <div className="flex items-center justify-center space-x-2">
@@ -1157,7 +874,7 @@ export default function CarPage() {
             </div>
           </button>
           <button
-            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'market' ? 'bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#16213e]/80'}`}
+            className={`flex-1 py-3 rounded-lg text-sm font-medium transition-all duration-300 ${activeTab === 'market' ? 'bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-[#14242d]/80'}`}
             onClick={() => setActiveTab('market')}
           >
             <div className="flex items-center justify-center space-x-2">
@@ -1172,8 +889,8 @@ export default function CarPage() {
         {activeTab === 'my-cars' ? (
           <>
             {/* Kullanıcı Araçları Listesi */}
-            <div className="bg-gradient-to-b from-[#1a1a2e] to-[#16213e] bg-opacity-80 rounded-xl p-5 shadow-lg border border-[#0f3460]">
-              <h3 className="text-lg font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white">Araçlarım ({userCars.length})</h3>
+            <div className="bg-gradient-to-b from-[#101b23] to-[#14242d] bg-opacity-80 rounded-xl p-5 shadow-lg border border-[#0f3460]">
+              <h3 className="text-lg font-semibold mb-4 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white">Araçlarım ({userCars.length})</h3>
               {userCars.length === 0 && !isLoading && (
                   <p className="text-center text-gray-400 py-4">Henüz hiç aracınız yok. Pazar sekmesinden yeni araçlar edinebilirsiniz.</p>
               )}
@@ -1207,7 +924,7 @@ export default function CarPage() {
                   return (
                     <div 
                       key={car.id} 
-                      className="bg-gradient-to-r from-[#0f3460] to-[#1a1a2e] rounded-lg overflow-hidden transition-all duration-300 hover:translate-y-[-2px] border border-[#2a3855] hover:border-[#3a497a]"
+                      className="bg-gradient-to-r from-[#0f3460] to-[#101b23] rounded-lg overflow-hidden transition-all duration-300 hover:translate-y-[-2px] border border-[#31505b] hover:border-[#3a497a]"
                     >
                       <div className="flex flex-col">
                         {/* Araç Görseli (Use image_url) */}
@@ -1260,7 +977,7 @@ export default function CarPage() {
                                 <span>Yakıt</span>
                                 <span>%{car.fuel}</span>
                               </div>
-                              <div className="w-full bg-[#2a3855] rounded-full h-2 overflow-hidden">
+                              <div className="w-full bg-[#31505b] rounded-full h-2 overflow-hidden">
                                 <div className="bg-gradient-to-r from-[#2ff7c1] via-[#6af7c1] to-[#a5f7c1] h-full rounded-full transition-all duration-500" style={{ width: `${car.fuel}%` }}></div>
                               </div>
                             </div>
@@ -1270,8 +987,8 @@ export default function CarPage() {
                                 <span>Durum</span>
                                 <span>%{car.condition}</span>
                               </div>
-                              <div className="w-full bg-[#2a3855] rounded-full h-2 overflow-hidden">
-                                <div className="bg-gradient-to-r from-[#2f7bf7] via-[#4f6cf8] to-[#7b2ff7] h-full rounded-full transition-all duration-500" style={{ width: `${car.condition}%` }}></div>
+                              <div className="w-full bg-[#31505b] rounded-full h-2 overflow-hidden">
+                                <div className="bg-gradient-to-r from-[#216b9c] via-[#4f6cf8] to-[#43c9d6] h-full rounded-full transition-all duration-500" style={{ width: `${car.condition}%` }}></div>
                               </div>
                             </div>
                           </div>
@@ -1286,7 +1003,7 @@ export default function CarPage() {
                               <div className="w-24 overflow-hidden">
                                 <div className="w-full h-1 bg-[#0d1423] rounded-full overflow-hidden mt-1">
                                   <div 
-                                    className="h-full bg-gradient-to-r from-[#2f7bf7] to-[#7b2ff7] transition-all duration-300"
+                                    className="h-full bg-gradient-to-r from-[#216b9c] to-[#43c9d6] transition-all duration-300"
                                     style={{ width: `${progress[miningSession.id] || 0}%` }}
                                   ></div>
                           </div>
@@ -1297,7 +1014,7 @@ export default function CarPage() {
             </div>
             
                       {/* Araç Kontrol Butonları - Her araç için göster */}
-                      <div className="p-3 border-t border-[#2a3855]/30 flex flex-wrap gap-2">
+                      <div className="p-3 border-t border-[#31505b]/30 flex flex-wrap gap-2">
                         {/* Dinamik Mining Butonu */}
                         <div className="flex-1">
                           {(() => {
@@ -1369,17 +1086,17 @@ export default function CarPage() {
         ) : (
           /* Pazar Tabı */
           <div className="space-y-5">
-            <div className="bg-gradient-to-b from-[#1a1a2e] to-[#16213e] rounded-xl p-5 shadow-lg border border-[#0f3460]">
-              <h3 className="text-lg font-semibold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#7b2ff7] to-white">Araç Modelleri</h3>
+            <div className="bg-gradient-to-b from-[#101b23] to-[#14242d] rounded-xl p-5 shadow-lg border border-[#0f3460]">
+              <h3 className="text-lg font-semibold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-white via-[#43c9d6] to-white">Araç Modelleri</h3>
               <p className="text-gray-400 text-sm mb-4">
-                 Farklı nadirliklerdeki araçları NMFP, TON ile satın alabilir veya NFT olarak mintleyebilirsiniz.
+                 Farklı nadirliklerdeki araçları NMFP puanları veya Telegram Stars ile satın alabilirsiniz.
               </p>
               
               {/* Market Filtresi (Series mantığı gözden geçirilmeli) */}
               <div className="flex overflow-x-auto pb-2 mb-4 space-x-2 scrollbar-hide">
                  {/* Filter buttons ... (Logic might need change based on how series is handled) */}
                 <button
-                  className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${ activeSeriesFilter === null ? 'bg-gradient-to-r from-[#7b2ff7] to-[#2f7bf7] text-white' : 'bg-[#16213e] text-gray-300 hover:bg-[#1a253a]' }`}
+                  className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${ activeSeriesFilter === null ? 'bg-gradient-to-r from-[#43c9d6] to-[#216b9c] text-white' : 'bg-[#14242d] text-gray-300 hover:bg-[#1a253a]' }`}
                   onClick={() => setActiveSeriesFilter(null)}
                 >
                   Tüm Modeller
@@ -1388,7 +1105,7 @@ export default function CarPage() {
                  {['911', 'Taycan', 'Cayenne', 'Panamera', 'Macan', '718'].map(series => (
                   <button
                     key={series}
-                    className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${ activeSeriesFilter === series ? 'bg-gradient-to-r from-[#7b2ff7] to-[#2f7bf7] text-white' : 'bg-[#16213e] text-gray-300 hover:bg-[#1a253a]' }`}
+                    className={`whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-medium ${ activeSeriesFilter === series ? 'bg-gradient-to-r from-[#43c9d6] to-[#216b9c] text-white' : 'bg-[#14242d] text-gray-300 hover:bg-[#1a253a]' }`}
                     onClick={() => setActiveSeriesFilter(series)}
                   >
                     {series}
@@ -1404,10 +1121,10 @@ export default function CarPage() {
                   return (
                     <div 
                       key={model.id} // Use model.id (UUID)
-                      className="bg-gradient-to-r from-[#0f3460]/90 to-[#0a1936]/90 rounded-xl overflow-hidden border border-[#2a3855] transition-all duration-300 hover:border-[#4a5886] shadow-lg flex flex-col"
+                      className="bg-gradient-to-r from-[#0f3460]/90 to-[#0a1936]/90 rounded-xl overflow-hidden border border-[#31505b] transition-all duration-300 hover:border-[#4a5886] shadow-lg flex flex-col"
                     >
                       {/* Araç Görseli */}
-                      <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#16213e] to-[#0f3460]">
+                      <div className="relative w-full aspect-[16/9] overflow-hidden bg-gradient-to-r from-[#14242d] to-[#0f3460]">
                          {/* ... gradient overlay ... */}
                         <Image
                           src={model.image_url || '/placeholder-car.png'} // Use image_url
@@ -1420,7 +1137,7 @@ export default function CarPage() {
                       </div>
                       
                       {/* Araç Bilgileri */}
-                      <div className="p-5 border-t border-b border-[#2a3855] bg-gradient-to-r from-[#0f3460]/50 to-[#1a1a2e]/50">
+                      <div className="p-5 border-t border-b border-[#31505b] bg-gradient-to-r from-[#0f3460]/50 to-[#101b23]/50">
                          {/* ... Model name, mining power, rarity display (using model.mining_power, model.rarity) ... */}
                         <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
                           <div>
@@ -1430,7 +1147,7 @@ export default function CarPage() {
                                 <p className="text-gray-400 text-xs mb-1">Madencilik Gücü</p>
                                 <p className="font-medium text-white flex items-center">
                                   {/* ... icon ... */}
-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-[#7b2ff7]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1 text-[#43c9d6]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                   </svg>
                                   {formatCurrency(model.mining_power)} NMFP/saat
@@ -1447,27 +1164,11 @@ export default function CarPage() {
                         </div>
                       </div>
                       
-                      {/* NFT Limit Bilgisi */}
-                      <div className="px-5 py-3 border-b border-[#2a3855] bg-gradient-to-r from-[#0f3460]/30 to-[#1a1a2e]/30">
-                         {/* NFT Limit display using model.nft_limit */}
-                        <p className="text-gray-400 text-xs mb-1">NFT Limiti</p>
-                        <div className="flex items-center">
-                          <div className="w-full bg-[#2a3855] rounded-full h-2 mr-3">
-                            {/* TODO: Need current minted count from somewhere if progress bar is desired */}
-                            <div 
-                              className="bg-gradient-to-r from-[#2f7bf7] to-[#5f40f8] h-full rounded-full" 
-                              style={{ width: `0%` }} // Placeholder, need minted count
-                            ></div>
-                          </div>
-                          <span className="text-xs font-semibold text-white">0 / {model.nft_limit ?? '∞'}</span>
-                        </div>
-                      </div>
-                      
                       {/* Satın Alma Butonları */}
                       <div className="p-5 flex flex-col gap-3">
                         {/* Buy with NMFP Button */}
                         <button 
-                          className={`bg-gradient-to-r from-[#7b2ff7] via-[#5f40f8] to-[#2f7bf7] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#7b2ff7]/30 flex items-center justify-between ${purchaseLoading === `NMFP-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
+                          className={`bg-gradient-to-r from-[#43c9d6] via-[#176e91] to-[#216b9c] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#43c9d6]/30 flex items-center justify-between ${purchaseLoading === `NMFP-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
                           onClick={() => handlePurchase(model, 'NMFP')}
                           disabled={purchaseLoading === `NMFP-${model.id}`}
                         >
@@ -1484,45 +1185,27 @@ export default function CarPage() {
                               </>
                            )}
                         </button>
-                        {/* Buy with TON Button */}
+                        {/* Buy with Telegram Stars */}
                         <button 
                           type="button"
-                          className={`bg-gradient-to-r from-[#0088cc] to-[#00a2e0] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#0088cc]/30 flex items-center justify-between ${purchaseLoading === `TON-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
-                          onClick={() => handlePurchase(model, 'TON')}
-                          disabled={purchaseLoading === `TON-${model.id}` || !tonConnectUI.connected}
+                          className={`bg-gradient-to-r from-[#0088cc] to-[#00a2e0] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#0088cc]/30 flex items-center justify-between ${purchaseLoading === `STARS-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
+                          onClick={() => handlePurchase(model, 'STARS')}
+                          disabled={purchaseLoading === `STARS-${model.id}`}
                         >
-                           {purchaseLoading === `TON-${model.id}` ? 'İşleniyor...' : (
+                           {purchaseLoading === `STARS-${model.id}` ? 'İşleniyor...' : (
                               <>
                           <div className="flex items-center">
                                   {/* ... icon ... */}
                             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                             </svg>
-                                  <span>{tonConnectUI.connected ? 'TON ile Satın Al' : 'Cüzdan Bağla'}</span>
+                                  <span>Stars ile Satın Al</span>
                           </div>
-                                <span className="font-semibold">{model.ton_price}</span>
+                                <span className="font-semibold">{model.stars_price}</span>
                               </>
                             )}
                         </button>
-                        {/* Mint NFT Button */}
-                        <button 
-                          className={`bg-gradient-to-r from-[#00ff88] to-[#00cc88] text-white py-3 px-4 rounded-lg text-sm font-medium transition-all duration-300 hover:shadow-lg hover:shadow-[#00ff88]/30 flex items-center justify-between ${purchaseLoading === `NFT-${model.id}` ? 'opacity-50 cursor-wait' : ''}`}
-                           onClick={() => handlePurchase(model, 'NFT')}
-                           disabled={purchaseLoading === `NFT-${model.id}` || !tonConnectUI.connected}
-                        >
-                           {purchaseLoading === `NFT-${model.id}` ? 'İşleniyor...' : (
-                            <>
-                              <div className="flex items-center">
-                                  {/* ... icon ... */}
-                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                                </svg>
-                                  <span>{tonConnectUI.connected ? 'NFT Olarak Mintle' : 'Cüzdan Bağla'}</span>
-                              </div>
-                                <span className="font-semibold">{model.nft_mint_price} TON</span>
-                            </>
-                          )}
-                        </button>
+
                       </div>
                     </div>
                   );

@@ -53,6 +53,7 @@ export enum Rarity {
  * Araç Modeli (car_models tablosu)
  */
 export interface CarModel {
+  stars_price?: number;
   id: string;                   // UUID Primary Key (DB: id UUID)
   name: string;                 // TEXT NOT NULL
   description: string | null;   // TEXT
@@ -117,6 +118,7 @@ export interface Transaction {
  * Pazarda satılan garajları temsil eder.
  */
 export interface GarageTemplate {
+  stars_price?: number;
   id: string;                   // TEXT Primary Key (template_id, e.g., 'nmfp-1')
   name: string;                 // TEXT NOT NULL
   description: string | null;   // TEXT
