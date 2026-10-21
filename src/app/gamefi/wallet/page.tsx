@@ -1,13 +1,76 @@
-'use client';
-import {useEffect,useState} from 'react';
-import {TonConnectButton,useTonAddress} from '@tonconnect/ui-react';
-import {useTelegram} from '@/components/TelegramInitProvider';
-import {transactionService} from '@/services/api';
-import type {Transaction} from '@/types';
-interface Order {id:string;title:string;amount:number;status:string;created_at:string;}
-export default function WalletPage(){
- const {user}=useTelegram(); const address=useTonAddress();
- const [orders,setOrders]=useState<Order[]>([]),[transactions,setTransactions]=useState<Transaction[]>([]),[error,setError]=useState('');
- useEffect(()=>{if(!user?.id)return;let alive=true;const refresh=async()=>{try{const r=await fetch('/api/stars/orders',{cache:'no-store'});if(!r.ok)throw new Error('Siparişler yüklenemedi.');const data=await r.json();const tx=await transactionService.getUserTransactions(user.id,20);if(alive){setOrders(data.orders);setTransactions(tx);setError('');}}catch(e){if(alive)setError(e instanceof Error?e.message:'Bağlantı hatası.');}};void refresh();const timer=setInterval(()=>{if(document.visibilityState==='visible')void refresh();},15000);return()=>{alive=false;clearInterval(timer);};},[user?.id]);
- return <div className="py-8 pb-28 space-y-6"><h1 className="text-3xl font-bold">Cüzdan & siparişler</h1><section className="bg-white/5 border border-white/10 rounded-2xl p-5"><p className="text-gray-400 text-sm">Oyun içi bakiye</p><p className="text-3xl font-bold mt-2">{Number(user?.balance || 0).toLocaleString()} NMFP</p><p className="text-xs text-gray-400 mt-2">NMFP bir oyun puanıdır; nakit veya kripto para karşılığı yoktur.</p></section><section className="bg-white/5 rounded-2xl p-5 space-y-3"><h2 className="font-semibold">TON cüzdanı</h2><TonConnectButton/>{address&&<p className="text-xs break-all text-gray-400">{address}</p>}<p className="text-sm text-gray-400">Cüzdan bağlantısı isteğe bağlıdır. Oyun içi ödemeler Telegram Stars ile yapılır.</p></section>{error&&<p role="alert" className="text-red-400">{error}</p>}<section className="space-y-3"><h2 className="text-xl font-semibold">Stars siparişleri</h2>{orders.length?orders.map(o=><article key={o.id} className="rounded-xl bg-white/5 p-4"><p>{o.title} · {o.amount} Stars</p><p className="text-sm text-gray-400">{o.status==='paid'?'Teslim edildi':o.status==='refunded'?'İade edildi':'Ödeme bekleniyor'}</p><p className="text-xs text-gray-500 break-all mt-2">{o.id}</p></article>):<p className="text-sm text-gray-400">Henüz sipariş yok.</p>}<a href="/support" className="text-sm underline">Ödeme desteği / iade talebi</a></section><section className="space-y-3"><h2 className="text-xl font-semibold">Son oyun işlemleri</h2>{transactions.map(tx=><div key={tx.id} className="flex justify-between gap-4 text-sm border-b border-white/10 py-3"><span>{tx.item || tx.source || tx.type}</span><span>{tx.amount} {tx.currency}</span></div>)}</section></div>;
+"use client";
+import { TonConnectButton, useTonAddress } from "@tonconnect/ui-react";
+import { useTelegram } from "@/components/TelegramInitProvider";
+import { orderStatus, transactionAmount } from "@/lib/gameState";
+import { formatCurrency } from "@/app/utils/formatters";
+export default function WalletPage() {
+  const { game, user } = useTelegram();
+  const address = useTonAddress();
+  if (!game) return <p role="status">Cüzdan yükleniyor…</p>;
+  return (
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Cüzdan & siparişler</h1>
+      <section className="cyber-panel p-5">
+        <p className="text-sm muted">Oyun içi bakiye</p>
+        <p className="text-3xl font-bold mt-2">
+          {formatCurrency(user?.balance || 0)} NMFP
+        </p>
+        <p className="text-xs muted mt-2">
+          NMFP bir oyun puanıdır; nakit veya kripto para karşılığı yoktur.
+        </p>
+      </section>
+      <section className="cyber-panel p-5 space-y-3">
+        <h2 className="font-semibold">TON cüzdanı</h2>
+        <TonConnectButton />
+        {address && <p className="text-xs break-all muted">{address}</p>}
+        <p className="text-sm muted">
+          Cüzdan bağlantısı isteğe bağlıdır. Oyun içi ödemeler Telegram Stars
+          ile yapılır.
+        </p>
+      </section>
+      <section className="space-y-3">
+        <h2 className="text-xl font-semibold">Stars siparişleri</h2>
+        {game.orders.length ? (
+          game.orders.map((o) => (
+            <article key={o.id} className="cyber-panel p-4">
+              <p>
+                {o.title} · {o.amount} Stars
+              </p>
+              <p className="text-sm muted">{orderStatus(o.status)}</p>
+              <p className="text-xs muted break-all mt-2">Sipariş: {o.id}</p>
+            </article>
+          ))
+        ) : (
+          <p className="text-sm muted">Henüz sipariş yok.</p>
+        )}
+        <a href="/support" className="text-sm underline">
+          Ödeme desteği / iade talebi
+        </a>
+      </section>
+      <section className="space-y-3">
+        <h2 className="text-xl font-semibold">Son 50 oyun işlemi</h2>
+        {game.transactions.length ? (
+          game.transactions.map((tx) => (
+            <div
+              key={tx.id}
+              className="flex justify-between gap-4 text-sm border-b border-white/10 py-3"
+            >
+              <div>
+                <p>{tx.item || tx.source || tx.type}</p>
+                <time dateTime={tx.date} className="text-xs muted">
+                  {new Date(tx.date).toLocaleString("tr-TR")}
+                </time>
+              </div>
+              <span className="whitespace-nowrap">
+                {formatCurrency(transactionAmount(tx))}{" "}
+                {tx.currency === "XTR" ? "Stars" : tx.currency}
+              </span>
+            </div>
+          ))
+        ) : (
+          <p className="muted">Henüz işlem yok.</p>
+        )}
+      </section>
+    </div>
+  );
 }
