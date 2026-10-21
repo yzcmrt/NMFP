@@ -1,11 +1,79 @@
-'use client';
-import {useState} from 'react';
-import {toast} from 'react-hot-toast';
-import {useTelegram} from '@/components/TelegramInitProvider';
-import {starsCheckout} from '@/lib/starsCheckout';
-export default function AutoMining({onBalanceUpdate}:{onBalanceUpdate?:(balance?:number)=>Promise<void>}) {
- const {user,refreshUserData}=useTelegram(); const [loading,setLoading]=useState(false);
- const active=Boolean(user?.premium_active && user.premium_until && new Date(user.premium_until)>new Date());
- async function purchase(){setLoading(true);try{await starsCheckout('premium','annual');await refreshUserData();await onBalanceUpdate?.();toast.success('Otomatik madencilik aktif.');}catch(e){toast.error(e instanceof Error?e.message:'Ödeme tamamlanamadı.');}finally{setLoading(false);}}
- return <section className="rounded-2xl border border-yellow-400/20 bg-yellow-400/5 p-5 space-y-3"><h2 className="font-semibold text-lg">Otomatik madencilik</h2><p className="text-sm text-gray-400">Uygun araçlar için madencilik turlarını otomatik başlatır. Yakıt ve bakım için NMFP puanları kullanılır.</p>{active?<p className="text-green-400">Aktif · {new Date(user!.premium_until!).toLocaleDateString()} tarihine kadar</p>:<button disabled={loading} onClick={purchase} className="bg-yellow-400 text-black px-4 py-3 rounded-xl font-bold disabled:opacity-50">{loading?'İşleniyor…':'199 Stars · 365 gün'}</button>}<p className="text-xs text-gray-400">Tek seferlik ödeme. Otomatik yenilenmez. <a href="/terms" className="underline">Satın alma koşulları</a></p></section>;
+"use client";
+import { toast } from "react-hot-toast";
+import { useTelegram } from "@/components/TelegramInitProvider";
+import { starsCheckout } from "@/lib/starsCheckout";
+import { gameAction } from "@/lib/gameActions";
+export default function AutoMining() {
+  const { user, busy, runOperation } = useTelegram();
+  const active = Boolean(
+    user?.premium_active &&
+    user.premium_until &&
+    Date.parse(user.premium_until) > Date.now(),
+  );
+  async function purchase() {
+    try {
+      await runOperation(async () => {
+        await starsCheckout("premium", "annual");
+        toast.success("Otomatik mining paketi aktif.");
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ödeme tamamlanamadı.");
+    }
+  }
+  async function toggle() {
+    try {
+      await runOperation(async () => {
+        await gameAction("set_auto_mining", { enabled: !user?.auto_mining });
+        toast.success(
+          user?.auto_mining
+            ? "Yeni otomatik turlar durduruldu. Mevcut turlar devam ediyor."
+            : "Otomatik mining açıldı. Uygun araçlar bir dakika içinde başlar.",
+        );
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Ayar kaydedilemedi.");
+    }
+  }
+  return (
+    <section className="cyber-panel p-5 space-y-3">
+      <h2 className="font-semibold text-lg">Otomatik mining</h2>
+      <p className="text-sm muted">
+        Boş kapasite olduğunda uygun araçlar için turları otomatik başlatır. Her
+        tur öncesinde yakıt ve bakım maliyeti NMFP bakiyenden düşer. Bakiye
+        yetersizse araç bekler.
+      </p>
+      {active ? (
+        <>
+          <p className="text-green-300">
+            Paket aktif ·{" "}
+            {new Date(user!.premium_until!).toLocaleDateString("tr-TR")}{" "}
+            tarihine kadar
+          </p>
+          <button
+            disabled={busy}
+            className="cyber-button disabled:opacity-40"
+            onClick={() => void toggle()}
+          >
+            {user?.auto_mining
+              ? "Otomatik turları duraklat"
+              : "Otomatik turları başlat"}
+          </button>
+        </>
+      ) : (
+        <button
+          disabled={busy}
+          onClick={() => void purchase()}
+          className="cyber-button disabled:opacity-40"
+        >
+          199 Stars · 365 gün
+        </button>
+      )}
+      <p className="text-xs muted">
+        Tek seferlik ödeme. Abonelik otomatik yenilenmez.{" "}
+        <a href="/terms" className="underline">
+          Satın alma koşulları
+        </a>
+      </p>
+    </section>
+  );
 }

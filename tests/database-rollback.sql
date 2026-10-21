@@ -2,6 +2,7 @@
 DO $$
 DECLARE u uuid; result jsonb; car integer; session_id integer; reward bigint; bal bigint; ord uuid; model uuid; n integer;
 BEGIN
+ IF EXISTS(SELECT 1 FROM users WHERE telegram_id='990000000000001') THEN RAISE EXCEPTION 'TEST fixture already exists'; END IF;
  result:=get_or_create_user('990000000000001','recovery_rollback_test',false,false);
  u:=(result->>'user_id')::uuid;
  IF u IS NULL THEN RAISE EXCEPTION 'TEST signup failed: %',result; END IF;
