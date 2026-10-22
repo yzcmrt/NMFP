@@ -10,6 +10,7 @@ import {
 } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { User } from "@/types";
 import type { GameSnapshot } from "@/lib/gameState";
 interface TelegramUser {
@@ -51,6 +52,7 @@ export default function TelegramInitProvider({
 }: {
   children: ReactNode;
 }) {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null),
     [telegramUser, setTelegramUser] = useState<TelegramUser | null>(null),
     [game, setGame] = useState<GameSnapshot | null>(null);
@@ -145,6 +147,14 @@ export default function TelegramInitProvider({
           setUser(body.user);
           setTelegramUser(body.telegramUser);
           await readGame();
+          // Fixed owner-setup deep link; never navigate to arbitrary initData URLs.
+          if (
+            new URLSearchParams(tg.initData).get("start_param") ===
+              "nftsetup" &&
+            window.location.pathname.replace(/\/$/, "") === "/gamefi"
+          ) {
+            router.replace("/gamefi/nft-setup");
+          }
         }
       } catch (e) {
         if (active) setError(e instanceof Error ? e.message : "Bağlanılamadı.");
@@ -183,7 +193,7 @@ export default function TelegramInitProvider({
       script?.removeEventListener("load", initialize);
       script?.removeEventListener("error", failed);
     };
-  }, [readGame]);
+  }, [readGame, router]);
   useEffect(() => {
     if (!user?.id) return;
     const refresh = () => {
