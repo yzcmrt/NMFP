@@ -3,6 +3,7 @@ import { useState } from "react";
 import Image from "next/image";
 import { toast } from "react-hot-toast";
 import { useTelegram } from "@/components/TelegramInitProvider";
+import NftGarage from "@/components/NftGarage";
 import CarOperations from "@/components/CarOperations";
 import { useGameClock } from "@/hooks/useGameClock";
 import { starsCheckout } from "@/lib/starsCheckout";
@@ -34,7 +35,7 @@ export default function CarPage() {
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-bold">Araç koleksiyonu</h1>
-      <div className="flex gap-3" role="tablist" aria-label="Araçlar">
+      <div className="flex gap-3 flex-wrap" role="tablist" aria-label="Araçlar">
         <button
           role="tab"
           aria-selected={tab === "owned"}
@@ -51,8 +52,18 @@ export default function CarPage() {
         >
           Mağaza
         </button>
+        <button
+          role="tab"
+          aria-selected={tab === "nft"}
+          className="cyber-button"
+          onClick={() => setTab("nft")}
+        >
+          NFT
+        </button>
       </div>
-      {tab === "owned" ? (
+      {tab === "nft" ? (
+        <NftGarage />
+      ) : tab === "owned" ? (
         <div className="grid md:grid-cols-2 gap-4">
           {game.cars
             .filter((c) => c.status !== "sold")

@@ -23,7 +23,9 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.8",
-    "@ton/core": "^0.62.0",
+    "@ton/core": "^0.63.1",
+    "@ton/crypto": "^3.3.0",
+    "@ton/ton": "^16.3.0",
     "@tonconnect/ui-react": "^2.1.0",
     "buffer": "^6.0.3",
     "framer-motion": "^12.6.3",
@@ -33,12 +35,13 @@
     "react-hot-toast": "^2.5.2",
     "react-icons": "^5.5.0",
     "recharts": "^2.15.2",
-    "zustand": "^4.5.0",
-    "server-only": "0.0.1"
+    "server-only": "0.0.1",
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@ton/sandbox": "^0.45.0",
     "@types/node": "^20.17.50",
     "@types/react": "^19.1.4",
     "@types/react-dom": "^19.1.5",
@@ -46,8 +49,8 @@
     "eslint-config-next": "15.5.28",
     "supabase": "^2.76.9",
     "tailwindcss": "^4",
-    "typescript": "^5",
-    "tsx": "^4.20.6"
+    "tsx": "^4.20.6",
+    "typescript": "^5"
   },
   "overrides": {
     "pbkdf2": "^3.1.3",

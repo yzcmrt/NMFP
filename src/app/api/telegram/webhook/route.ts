@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { errorResponse,HttpError } from '@/server/auth';
 import { database } from '@/server/db';
 import { telegram } from '@/server/telegram';
+import {nftAvailability} from '@/server/nft/availability';
 import { validPreCheckout } from '@/server/paymentChecks';
 export async function POST(request:Request) {
  try {
@@ -12,8 +13,13 @@ export async function POST(request:Request) {
    const q=update.pre_checkout_query;
    const {data:o,error}=await db.from('star_orders').select('*,users!inner(telegram_id)').eq('id',q.invoice_payload).maybeSingle();
    let ok=!error && validPreCheckout(o?{...o,telegram_id:o.users.telegram_id}:null,{currency:q.currency,total_amount:q.total_amount,telegram_id:String(q.from.id)});
-   if(ok && o.kind!=='premium') {
-    const {count,error:ownedError}=await db.from(o.kind==='car'?'user_cars':'garages').select('id',{count:'exact',head:true}).eq('user_id',o.user_id).eq(o.kind==='car'?'car_model_id':'template_id',o.product_id);
+   if(ok && ['nft_car','nft_upgrade'].includes(o.kind))ok=(await nftAvailability()).ready;
+   if(ok && o.kind==='nft_upgrade'){
+    const car=await db.from('user_cars').select('id').eq('id',Number(o.product_id)).eq('user_id',o.user_id).neq('status','sold').maybeSingle();
+    const existing=await db.from('nft_jobs').select('id').eq('car_id',Number(o.product_id)).maybeSingle();
+    ok=!car.error&&Boolean(car.data)&&!existing.error&&!existing.data;
+   }else if(ok && o.kind!=='premium') {
+    const {count,error:ownedError}=await db.from((o.kind==='car'||o.kind==='nft_car')?'user_cars':'garages').select('id',{count:'exact',head:true}).eq('user_id',o.user_id).eq((o.kind==='car'||o.kind==='nft_car')?'car_model_id':'template_id',o.product_id);
     ok=!ownedError && !count;
    }
    await telegram('answerPreCheckoutQuery',{pre_checkout_query_id:q.id,ok:Boolean(ok),...(!ok?{error_message:'This order is unavailable or has expired. Please reopen checkout.'}:{})});

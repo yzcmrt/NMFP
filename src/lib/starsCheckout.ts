@@ -1,21 +1,22 @@
 "use client";
 export async function starsCheckout(
-  kind: "car" | "garage" | "premium",
+  kind: "car" | "garage" | "premium" | "nft_car" | "nft_upgrade",
   productId: string,
+  recipientAddress?: string,
 ): Promise<void> {
   const tg = (window as any).Telegram?.WebApp;
   if (!tg?.openInvoice)
     throw new Error("Open the game in Telegram to pay with Stars.");
   if (
     !window.confirm(
-      "This is a one-time purchase of an in-game item with no cash value. By continuing, you accept the purchase terms at /terms. Payment support: /support. Continue?",
+      kind.startsWith("nft_") ? "NFT belirtilen TON adresine otomatik gönderilecek. NFT transferi oyun aracını veya mining ilerlemesini devretmez. Tek seferlik Stars ödemesi ve /terms koşullarını kabul ediyor musun?" : "This is a one-time purchase of an in-game item with no cash value. By continuing, you accept the purchase terms at /terms. Payment support: /support. Continue?",
     )
   )
     throw new Error("Purchase cancelled.");
   const response = await fetch("/api/stars/invoice", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind, productId, termsAccepted: true }),
+    body: JSON.stringify({ kind, productId, recipientAddress, termsAccepted: true }),
   });
   const result = await response.json();
   if (!response.ok)
