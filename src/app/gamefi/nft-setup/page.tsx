@@ -28,7 +28,25 @@ export default function NftSetup() {
     if (!data?.transaction) return;
     setBusy(true);
     try {
-      await ui.sendTransaction(data.transaction);
+      const r = await fetch("/api/nft/setup", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(15000),
+      });
+      const latest = await r.json();
+      if (!r.ok) throw Error("Setup unavailable");
+      setData(latest);
+      if (
+        !latest.transaction ||
+        latest.step !== data.step ||
+        latest.owner !== data.owner ||
+        latest.signerAddress !== data.signerAddress
+      ) {
+        setMessage(
+          "Zincir durumu değişti. Güncel adımı kontrol edip yeniden onayla.",
+        );
+        return;
+      }
+      await ui.sendTransaction(latest.transaction);
       setMessage(
         "İşlem cüzdana gönderildi. Zincir onayından sonra durumu yenile.",
       );
@@ -65,6 +83,14 @@ export default function NftSetup() {
                 kontratlarda kalabilir.
               </p>
               <TonConnectButton />
+              {wallet &&
+                (wallet.account.address !== data.owner ||
+                  wallet.account.chain !== "-239") && (
+                  <p role="alert">
+                    Bağlı cüzdan koleksiyonun mevcut sahibi değil veya test
+                    ağında. Sahip cüzdanını TON mainnet üzerinde bağla.
+                  </p>
+                )}
               {data.step === "done" ? (
                 <p>
                   Metadata ve sahip bağlantısı hazır. Otomatik işleyici
