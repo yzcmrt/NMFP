@@ -1,6 +1,10 @@
-# NMFP — Telegram garage game
+# NMFP — Need Money for Porsche
 
-A Next.js Telegram Mini App for collecting virtual cars, managing garages and earning in-game NMFP points. Purchases use Telegram Stars. NMFP points and game items have no cash value; this release does not mint NFTs or accept TON deposits.
+A cyberpunk demo website and Telegram Mini App for collecting virtual cars, managing garages and simulated mining. NMFP means **Need Money for Porsche**. The original pink, violet and cyan neon identity carries through the website and game.
+
+The Mini App opens with an English demo notice before showing game content. It does not offer or guarantee income, payouts, investment returns or a real Porsche. In-game NMFP points have no cash value or withdrawal option. Optional Telegram Stars purchases cost real money and buy only the described features or collectibles. This is an independent fan project, not affiliated with Porsche AG.
+
+Automatic TON NFT delivery is implemented but checkout remains disabled until the collection owner completes signer, metadata and funding setup. See the NFT runbook below; the game does not accept TON deposits.
 
 ## Development
 

@@ -1,2 +1,60 @@
-import Link from 'next/link';
-export default function Terms(){return <article className="max-w-2xl mx-auto py-20 space-y-6"><h1 className="text-3xl font-bold">NMFP purchase terms</h1><p>Updated 22 October 2026. NMFP is an independent game and is not affiliated with or endorsed by Porsche.</p><p>NMFP points, cars, garages and premium features are virtual game items. They have no cash value, do not represent cryptocurrency holdings, and cannot be redeemed for money or a real car.</p><p>Paid game items use Telegram Stars. The final price appears in Telegram before you approve payment. Car and garage purchases deliver one item to your account. Auto mining costs 199 Stars for 365 days, with no automatic renewal. Network availability and game maintenance may affect access.</p><p>When enabled, an NFT collectible for an existing car costs 50 Stars. A new car with an NFT costs the displayed car price plus 50 Stars. The recipient TON mainnet address must be checked before payment and cannot be changed afterward. NFT minting is queued after confirmed payment; the game shows delivery only after on-chain verification. No separate TON payment is requested from the buyer. Transferring an NFT does not transfer the in-game car, account, or mining progress. NFTs have no guaranteed resale value or return. NFT sales close automatically when the delivery service is unavailable.</p><p>Delivery occurs after Telegram confirms payment. If confirmation is delayed, do not purchase again: check your order history and contact support with the order ID. For duplicate, incorrect or undelivered purchases, contact payment support; verified issues can be refunded through Telegram Stars. This does not limit mandatory consumer rights.</p><p>NMFP support, not Telegram support, handles purchases made in this game.</p><Link href="/support" className="underline">Game and payment support</Link><p><Link href="/privacy" className="underline">Privacy policy</Link></p></article>}
+import Link from "next/link";
+export default function Terms() {
+  return (
+    <article className="max-w-2xl mx-auto py-20 space-y-6">
+      <h1 className="text-3xl font-bold">NMFP purchase terms</h1>
+      <p>
+        Updated 23 October 2026. NMFP stands for Need Money for Porsche. It is
+        an independent experimental demo game and is not affiliated with or
+        endorsed by Porsche.
+      </p>
+      <p>
+        The project does not offer or guarantee income, payouts, investment
+        returns, or a real Porsche. Mining is simulated. Optional purchases cost
+        real money but do not generate earnings. This demo disclosure does not
+        remove the delivery and refund responsibilities described below.
+      </p>
+      <p>
+        NMFP points, cars, garages and premium features are virtual game items.
+        They have no cash value, do not represent cryptocurrency holdings, and
+        cannot be redeemed for money or a real car.
+      </p>
+      <p>
+        Paid game items use Telegram Stars. The final price appears in Telegram
+        before you approve payment. Car and garage purchases deliver one item to
+        your account. Auto mining costs 199 Stars for 365 days, with no
+        automatic renewal. Network availability and game maintenance may affect
+        access.
+      </p>
+      <p>
+        When enabled, an NFT collectible for an existing car costs 50 Stars. A
+        new car with an NFT costs the displayed car price plus 50 Stars. The
+        recipient TON mainnet address must be checked before payment and cannot
+        be changed afterward. NFT minting is queued after confirmed payment; the
+        game shows delivery only after on-chain verification. No separate TON
+        payment is requested from the buyer. Transferring an NFT does not
+        transfer the in-game car, account, or mining progress. NFTs have no
+        guaranteed resale value or return. NFT sales close automatically when
+        the delivery service is unavailable.
+      </p>
+      <p>
+        Delivery occurs after Telegram confirms payment. If confirmation is
+        delayed, do not purchase again: check your order history and contact
+        support with the order ID. For duplicate, incorrect or undelivered
+        purchases, contact payment support; verified issues can be refunded
+        through Telegram Stars. This does not limit mandatory consumer rights.
+      </p>
+      <p>
+        NMFP support, not Telegram support, handles purchases made in this game.
+      </p>
+      <Link href="/support" className="underline">
+        Game and payment support
+      </Link>
+      <p>
+        <Link href="/privacy" className="underline">
+          Privacy policy
+        </Link>
+      </p>
+    </article>
+  );
+}

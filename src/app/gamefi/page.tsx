@@ -36,11 +36,11 @@ export default function GameFiPage() {
         />
         <div className="garage-banner-shade" />
         <div className="garage-banner-copy">
-          <p className="eyebrow">NIGHT SHIFT // KONTROL MERKEZİ</p>
+          <p className="eyebrow">NMFP // NEED MONEY FOR PORSCHE</p>
           <h2>
-            Garaj senin.
+            Hayalinde bir Porsche.
             <br />
-            Sıradaki hamle de.
+            Ekranında neon bir garaj.
           </h2>
           <Link href="/gamefi/car" className="text-link">
             Araç koleksiyonu ↗
