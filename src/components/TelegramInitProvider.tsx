@@ -9,6 +9,8 @@ import {
   type ReactNode,
 } from "react";
 import Image from "next/image";
+import DemoNotice from "./DemoNotice";
+import BrandMark from "./BrandMark";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { User } from "@/types";
@@ -53,6 +55,7 @@ export default function TelegramInitProvider({
   children: ReactNode;
 }) {
   const router = useRouter();
+  const [demoAcknowledged, setDemoAcknowledged] = useState(false);
   const [user, setUser] = useState<User | null>(null),
     [telegramUser, setTelegramUser] = useState<TelegramUser | null>(null),
     [game, setGame] = useState<GameSnapshot | null>(null);
@@ -209,6 +212,8 @@ export default function TelegramInitProvider({
       document.removeEventListener("visibilitychange", refresh);
     };
   }, [user?.id, readGame]);
+  if (!demoAcknowledged)
+    return <DemoNotice onContinue={() => setDemoAcknowledged(true)} />;
   return (
     <TelegramContext.Provider
       value={{
@@ -237,13 +242,13 @@ export default function TelegramInitProvider({
           />
           <div className="gate-panel">
             <Link href="/" className="wordmark">
-              N<span> / </span>MFP
+              <BrandMark />
             </Link>
-            <p className="eyebrow">CYBER GARAGE // ACCESS TERMINAL</p>
+            <p className="eyebrow">NEED MONEY FOR PORSCHE // DEMO ACCESS</p>
             <h1>
-              Your night
+              Your dream
               <br />
-              shift awaits<span className="cursor-mark">_</span>
+              garage awaits<span className="cursor-mark">_</span>
             </h1>
             {isLoading ? (
               <p role="status" className="gate-status">
