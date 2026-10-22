@@ -488,3 +488,6 @@ a:hover { text-decoration:none; }
  .gate-panel{padding:28px;} .gate-panel h1{font-size:40px;} .gate-panel .eyebrow{font-size:8px;} .game-legal{gap:12px;font-size:8px;}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;}}
+
+.cyber-button[aria-selected="false"], .cyber-button[aria-pressed="false"] { background:#243239; color:#d5e4e7; }
+.cyber-button:disabled { cursor:not-allowed; transform:none; }
