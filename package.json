@@ -60,6 +60,10 @@
     "@eslint/plugin-kit": "^0.3.4",
     "axios": "^1.8.4",
     "sha.js": "^2.4.12",
-    "postcss": "^8.5.23"
+    "postcss": "^8.5.23",
+    "follow-redirects": "^1.16.2",
+    "minimatch": "^11.0.1",
+    "deepmerge": "^4.3.2",
+    "zod": "^3.24.2"
   }
 }
